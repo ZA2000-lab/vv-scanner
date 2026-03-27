@@ -1,10 +1,8 @@
 flask==3.0.3
 flask-cors==4.0.1
 yfinance==0.2.54
-scipy==1.11.4
 numpy==1.26.4
 pandas==2.2.2
 lxml==5.2.2
 html5lib==1.1
 gunicorn==22.0.0
- 
