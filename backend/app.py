@@ -17,7 +17,6 @@ from flask_cors import CORS
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
-from scipy.interpolate import interp1d
 import numpy as np
 import threading
 import concurrent.futures
@@ -207,13 +206,12 @@ def yang_zhang(price_data, window=30, trading_periods=252):
 
 
 def build_ts(days, ivs):
-    days = np.array(days);  ivs = np.array(ivs)
-    idx  = days.argsort();  days = days[idx];  ivs = ivs[idx]
-    spl  = interp1d(days, ivs, kind='linear', fill_value="extrapolate")
+    days = np.array(days, dtype=float);  ivs = np.array(ivs, dtype=float)
+    idx  = days.argsort();               days = days[idx];  ivs = ivs[idx]
     def ts(dte):
-        if   dte < days[0]:   return float(ivs[0])
-        elif dte > days[-1]:  return float(ivs[-1])
-        else:                 return float(spl(dte))
+        if   dte <= days[0]:   return float(ivs[0])
+        elif dte >= days[-1]:  return float(ivs[-1])
+        else:                  return float(np.interp(dte, days, ivs))
     return ts
 
 
