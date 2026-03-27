@@ -1,17 +1,13 @@
 “””
-VV Scanner Backend — Full Market Edition
-Earnings IV Crush Scanner — Calendar Spread Strategy
+VV Scanner Backend - Full Market Edition
+Earnings IV Crush Scanner - Calendar Spread Strategy
 
 Exact thresholds from VolatilityVibes calculator.py:
 
 - ts_slope_0_45 <= -0.00406
 - iv30_rv30 >= 1.25
 - avg_volume >= 1,500,000
-
-Universe: S&P 500 + Nasdaq 100 (fetched live from Wikipedia)
-+ large supplemental list = 1,000-1,400 unique tickers
-Only surfaces stocks with earnings within the next 35 days AND options available.
-“””
+  “””
 
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -30,11 +26,9 @@ log = logging.getLogger(**name**)
 app = Flask(**name**)
 CORS(app)
 
-# ── Config ────────────────────────────────────────────────────────────────────
-
-CACHE_TTL      = 6 * 3600   # refresh every 6 hours
-EARNINGS_WINDOW = 50         # days ahead to look for earnings
-MAX_WORKERS    = 8           # parallel yfinance threads
+CACHE_TTL       = 6 * 3600
+EARNINGS_WINDOW = 60
+MAX_WORKERS     = 8
 
 _cache = {
 “results”:  None,
@@ -44,16 +38,16 @@ _cache = {
 “progress”: {“done”: 0, “total”: 0, “phase”: “idle”},
 }
 
-# ── Universe builders ─────────────────────────────────────────────────────────
+# – Universe builders —————————————————––
 
 def fetch_sp500():
 try:
 df = pd.read_html(“https://en.wikipedia.org/wiki/List_of_S%26P_500_companies”)[0]
 tickers = [str(t).replace(”.”, “-”) for t in df[“Symbol”].tolist()]
-log.info(f”  S&P 500: {len(tickers)} tickers”)
+log.info(”  S&P 500: %d tickers”, len(tickers))
 return tickers
 except Exception as e:
-log.warning(f”  S&P 500 fetch failed: {e}”)
+log.warning(”  S&P 500 fetch failed: %s”, e)
 return []
 
 def fetch_nasdaq100():
@@ -62,99 +56,42 @@ tables = pd.read_html(“https://en.wikipedia.org/wiki/Nasdaq-100”)
 for df in tables:
 cols_lower = [str(c).lower() for c in df.columns]
 if “ticker” in cols_lower or “symbol” in cols_lower:
-col = df.columns[[str(c).lower() in (“ticker”, “symbol”) for c in df.columns]][0]
+col = df.columns[[str(c).lower() in (“ticker”,“symbol”) for c in df.columns]][0]
 tickers = [str(t).replace(”.”, “-”) for t in df[col].dropna().tolist()
 if isinstance(t, str) and 1 <= len(str(t)) <= 6]
 if len(tickers) > 50:
-log.info(f”  Nasdaq 100: {len(tickers)} tickers”)
+log.info(”  Nasdaq 100: %d tickers”, len(tickers))
 return tickers
 return []
 except Exception as e:
-log.warning(f”  Nasdaq 100 fetch failed: {e}”)
+log.warning(”  Nasdaq 100 fetch failed: %s”, e)
 return []
 
-# Large supplemental list — everything that might have active options but isn’t
-
-# guaranteed to be in S&P 500 or Nasdaq 100
-
 SUPPLEMENTAL = [
-# Mega cap / most liquid
 “AAPL”,“MSFT”,“NVDA”,“AMZN”,“META”,“GOOGL”,“GOOG”,“TSLA”,“NFLX”,“ORCL”,
-# Semis
 “AMD”,“INTC”,“QCOM”,“TXN”,“AVGO”,“MU”,“AMAT”,“LRCX”,“KLAC”,“MRVL”,
-“ARM”,“ASML”,“TSM”,“SMCI”,“ON”,“SWKS”,“MPWR”,“ENPH”,“FSLR”,“ACLS”,
-“AMKR”,“COHU”,“CEVA”,“FORM”,“IPGP”,“KLIC”,“ONTO”,“UCTT”,“WOLF”,
-# Cloud / SaaS
+“ARM”,“ASML”,“TSM”,“SMCI”,“ON”,“SWKS”,“MPWR”,“ENPH”,“FSLR”,
 “CRM”,“NOW”,“PANW”,“CRWD”,“NET”,“DDOG”,“SNOW”,“MDB”,“OKTA”,“ZS”,
 “FTNT”,“HUBS”,“WDAY”,“TEAM”,“SHOP”,“MELI”,“TTD”,“RBLX”,“PATH”,
-“ZM”,“DOCU”,“TWLO”,“BILL”,“GTLB”,“SMAR”,“FRSH”,“CFLT”,“DOMO”,
-“APPN”,“FROG”,“BRZE”,“TASK”,“DV”,“PUBM”,“MGNI”,“RAMP”,“ASAN”,
-“MNDY”,“CWAN”,“ALTR”,“TOST”,“LSPD”,“WIX”,“FIVN”,“NICE”,“CLOU”,
-# Fintech / payments
-“PYPL”,“SQ”,“AFRM”,“UPST”,“SOFI”,“HOOD”,“COIN”,“NU”,“DAVE”,
-“PSFE”,“OPFI”,“FLYW”,“GREE”,“NCNO”,“PAGS”,“STNE”,“DLO”,“RELY”,
-# Crypto adjacent
-“MARA”,“RIOT”,“MSTR”,“HUT”,“CLSK”,“CIFR”,“BTBT”,“CORZ”,“HIVE”,
-“WGMI”,“BITI”,“BITO”,
-# Biotech / pharma
-“MRNA”,“BNTX”,“NVAX”,“ALNY”,“BMRN”,“RARE”,“HALO”,“EXAS”,“NBIX”,
-“PTGX”,“ACAD”,“SAGE”,“KRYS”,“BEAM”,“EDIT”,“NTLA”,“CRSP”,“FATE”,
-“KYMR”,“MRUS”,“TGTX”,“RCKT”,“ARVN”,“KRTX”,“AXSM”,“INVA”,“IMVT”,
-“ARQT”,“PRTA”,“PTCT”,“RETA”,“RVMD”,“VERV”,“RXDX”,“SRRK”,“TPVG”,
-“DNLI”,“KPTI”,“MDGL”,“NUVL”,“ORIC”,“PRAX”,“RDNT”,“RLAY”,“VKTX”,
-“XNCR”,“ZNTL”,“ACMR”,“ADMA”,“ADPT”,“AGIO”,“AKBA”,“ALEC”,“ALLK”,
-# EV / Auto
-“RIVN”,“LCID”,“NKLA”,“F”,“GM”,“TM”,“HMC”,“STLA”,“RACE”,“POAI”,
-# Consumer / retail
-“HD”,“WMT”,“COST”,“MCD”,“SBUX”,“NKE”,“TGT”,“LOW”,“BKNG”,“ABNB”,
-“UBER”,“LYFT”,“DASH”,“ETSY”,“EBAY”,“AMZN”,“CPNG”,“SE”,“GRAB”,
-“PTON”,“W”,“BIRD”,“LULU”,“DECK”,“SKX”,“CROX”,“YETI”,“PVH”,“RL”,
-“HBI”,“GOOS”,“UAA”,“PLNT”,“WING”,“TXRH”,“CMG”,“DRI”,“CAKE”,“DINE”,
-“EAT”,“JACK”,“PLAY”,“SHAK”,“WEN”,“YUM”,“YUMC”,“QSR”,“RRGB”,
-# Consumer staples
-“PG”,“KO”,“PEP”,“PM”,“MO”,“CL”,“KMB”,“GIS”,“K”,“HSY”,“MNST”,
-“CELH”,“FIZZ”,“COKE”,“KDP”,“STZ”,“BF-B”,“MGPI”,“ABEV”,“SAM”,
-# Energy
-“XOM”,“CVX”,“COP”,“EOG”,“SLB”,“OXY”,“FANG”,“DVN”,“MRO”,“HES”,
-“APA”,“AR”,“EQT”,“RRC”,“CNX”,“SM”,“VET”,“NOG”,“CIVI”,“BTU”,
-“ARCH”,“AMR”,“METC”,“ARCH”,“TALO”,“VTLE”,“ESTE”,“FLNC”,“CLNE”,
-# Financials
-“JPM”,“BAC”,“WFC”,“GS”,“MS”,“C”,“V”,“MA”,“AXP”,“BLK”,“SCHW”,
-“COF”,“DFS”,“SYF”,“AIG”,“MET”,“PRU”,“ALL”,“TRV”,“CB”,“HIG”,
-“BRK-B”,“USB”,“PNC”,“TFC”,“RF”,“FITB”,“HBAN”,“KEY”,“CFG”,“ZION”,
-“MTB”,“SIVB”,“PACW”,“WAL”,“BOKF”,“FFIN”,“IBOC”,“SNV”,“UMBF”,
-# Healthcare / insurance
+“ZM”,“DOCU”,“TWLO”,“BILL”,“GTLB”,“SMAR”,“PLTR”,“BRZE”,“CFLT”,
+“JPM”,“BAC”,“WFC”,“GS”,“MS”,“C”,“V”,“MA”,“AXP”,“BLK”,“SCHW”,“COF”,
+“DFS”,“SYF”,“AIG”,“MET”,“PRU”,“ALL”,“TRV”,“CB”,“BRK-B”,“USB”,“PNC”,“TFC”,
+“COIN”,“HOOD”,“SOFI”,“PYPL”,“SQ”,“AFRM”,“UPST”,“NU”,
 “UNH”,“JNJ”,“LLY”,“ABBV”,“MRK”,“PFE”,“AMGN”,“GILD”,“VRTX”,“REGN”,
-“BMY”,“BIIB”,“DXCM”,“ISRG”,“EW”,“ZBH”,“HUM”,“CVS”,“CI”,“CNC”,
-“HCA”,“THC”,“UHS”,“MCK”,“ABC”,“CAH”,“OMI”,“PDCO”,“HSIC”,“XRAY”,
-# Industrials / defense
+“BMY”,“BIIB”,“DXCM”,“ISRG”,“EW”,“ZBH”,“HUM”,“CVS”,“CI”,“CNC”,“HCA”,
+“MRNA”,“BNTX”,“NVAX”,“ALNY”,“BMRN”,“RARE”,“HALO”,“NBIX”,“VKTX”,“KYMR”,
+“HD”,“WMT”,“COST”,“MCD”,“SBUX”,“NKE”,“TGT”,“LOW”,“BKNG”,“ABNB”,
+“UBER”,“LYFT”,“DASH”,“ETSY”,“EBAY”,“CPNG”,“SE”,“PTON”,“W”,“LULU”,
+“RIVN”,“F”,“GM”,“LCID”,“PG”,“KO”,“PEP”,“PM”,“MO”,“CL”,“KMB”,
+“XOM”,“CVX”,“COP”,“EOG”,“SLB”,“OXY”,“FANG”,“DVN”,“MRO”,“HES”,
 “BA”,“CAT”,“DE”,“GE”,“HON”,“RTX”,“LMT”,“NOC”,“UPS”,“FDX”,“ETN”,
-“EMR”,“PH”,“ROK”,“IR”,“AME”,“GNRC”,“AXON”,“CACI”,“KTOS”,“HII”,
-“LDOS”,“BAH”,“SAIC”,“FTAI”,“TDG”,“HEICO”,“HWM”,“TXT”,“DRS”,
-“MOOG”,“CW”,“AEIS”,“AVAV”,“CDRE”,“DRS”,“ESLT”,“FLIR”,“KTOS”,
-# Communication / media
+“EMR”,“PH”,“AXON”,“TDG”,“HEICO”,
 “DIS”,“CMCSA”,“T”,“VZ”,“TMUS”,“SNAP”,“PINS”,“SPOT”,“WBD”,“PARA”,
-“FUBO”,“SIRI”,“IMAX”,“AMC”,“CNK”,“NWSA”,“NYT”,“FOXA”,“FOX”,
-# Chinese ADRs
-“BABA”,“BIDU”,“JD”,“PDD”,“NIO”,“XPEV”,“LI”,“BILI”,“TME”,“VNET”,
-“IQ”,“TIGR”,“FUTU”,“UP”,“LABU”,“DIDI”,“CANG”,“CAN”,“GOTU”,
-# Real estate / REIT
-“AMT”,“PLD”,“EQIX”,“CCI”,“SPG”,“O”,“AVB”,“EQR”,“VTR”,“WELL”,
-“HST”,“RHP”,“SLG”,“BXP”,“KIM”,“REG”,“UDR”,“NNN”,“WPC”,“STAG”,
-# Utilities
-“NEE”,“DUK”,“SO”,“AEP”,“EXC”,“XEL”,“PCG”,“ED”,“ETR”,“PEG”,
-# Materials
-“LIN”,“APD”,“FCX”,“NEM”,“NUE”,“VMC”,“MLM”,“CF”,“MOS”,“IFF”,
-# Meme / speculative / high-vol
-“GME”,“AMC”,“BB”,“SPCE”,“NKLA”,“FCEL”,“PLUG”,“BLNK”,“CHPT”,
-“EVGO”,“DKNG”,“PENN”,“WYNN”,“MGM”,“LVS”,“CZR”,“MLCO”,“NCLH”,
-“CCL”,“RCL”,“AAL”,“DAL”,“UAL”,“LUV”,“JBLU”,“ALK”,“SAVE”,
-# Quantum / AI speculative
-“IONQ”,“QUBT”,“RGTI”,“SOUN”,“BBAI”,“QBTS”,“ARQT”,“LAES”,“DJTWW”,
-# ETFs with liquid options
-“SPY”,“QQQ”,“IWM”,“SMH”,“XLE”,“XLF”,“XLK”,“XLV”,“XLI”,“XLU”,“XLP”,
-“ARKK”,“GLD”,“SLV”,“TLT”,“HYG”,“EEM”,“EFA”,“VWO”,“KWEB”,“SOXS”,“SOXL”,
-“TQQQ”,“SQQQ”,“SPXU”,“UPRO”,“UVXY”,“SVXY”,
+“BABA”,“BIDU”,“JD”,“PDD”,“NIO”,“XPEV”,“LI”,“BILI”,“TME”,
+“AMT”,“PLD”,“EQIX”,“CCI”,“SPG”,“NEE”,“DUK”,“SO”,“LIN”,“FCX”,“NEM”,
+“MARA”,“RIOT”,“MSTR”,“HUT”,“CLSK”,“IONQ”,“QUBT”,“RGTI”,“SOUN”,“BBAI”,
+“GME”,“AMC”,“DKNG”,“PENN”,“WYNN”,“MGM”,“CCL”,“RCL”,“AAL”,“DAL”,“UAL”,
+“SPY”,“QQQ”,“IWM”,“SMH”,“XLE”,“XLF”,“XLK”,“XLV”,“ARKK”,“GLD”,“TLT”,
 ]
 
 def build_universe():
@@ -169,10 +106,105 @@ for t in tickers
 if str(t).strip().upper().replace(”-”,””).isalpha()
 and 1 <= len(str(t).strip()) <= 6
 })
-log.info(f”Universe: {len(cleaned)} unique tickers”)
+log.info(“Universe: %d unique tickers”, len(cleaned))
 return cleaned
 
-# ── Core scoring (exact calculator.py logic) ──────────────────────────────────
+# – Earnings detection - tries every available yfinance method –––––––
+
+def get_earnings_date(sym):
+“””
+Try every yfinance method to find an upcoming earnings date.
+Returns (date_str, days_away) or (None, None).
+“””
+today = datetime.today().date()
+
+```
+def check(dt_val):
+    try:
+        if isinstance(dt_val, (int, float)):
+            dt = datetime.utcfromtimestamp(dt_val).date()
+        else:
+            dt = pd.Timestamp(dt_val).date()
+        diff = (dt - today).days
+        if 0 <= diff <= EARNINGS_WINDOW:
+            return dt.strftime("%b %d"), diff
+    except:
+        pass
+    return None, None
+
+stock = yf.Ticker(sym)
+
+# Method 1: get_earnings_dates (most reliable in yfinance 0.2.x)
+try:
+    ed = stock.get_earnings_dates(limit=12)
+    if ed is not None and not ed.empty:
+        for idx in sorted(ed.index):
+            r, d = check(idx)
+            if r: return r, d
+except:
+    pass
+
+# Method 2: earnings_dates property
+try:
+    ed = stock.earnings_dates
+    if ed is not None and not ed.empty:
+        for idx in sorted(ed.index):
+            r, d = check(idx)
+            if r: return r, d
+except:
+    pass
+
+# Method 3: calendar dict/DataFrame
+try:
+    cal = stock.calendar
+    if cal is not None:
+        dates = []
+        if isinstance(cal, dict):
+            for key in ('Earnings Date', 'earningsDate'):
+                raw = cal.get(key)
+                if raw is not None:
+                    dates = list(raw) if hasattr(raw, '__iter__') and not isinstance(raw, str) else [raw]
+                    break
+        elif isinstance(cal, pd.DataFrame):
+            for key in ('Earnings Date', 'earningsDate'):
+                if key in cal.columns:
+                    dates = cal[key].dropna().tolist(); break
+                if key in cal.index:
+                    dates = [cal.loc[key]]; break
+        for d in dates:
+            r, days = check(d)
+            if r: return r, days
+except:
+    pass
+
+# Method 4: info dict - earningsDate is a list of timestamps
+try:
+    info = stock.info
+    for key in ('earningsDate', 'earningsTimestamp'):
+        val = info.get(key)
+        if val:
+            items = val if isinstance(val, list) else [val]
+            for item in items:
+                r, d = check(item)
+                if r: return r, d
+except:
+    pass
+
+# Method 5: fast_info
+try:
+    fi = stock.fast_info
+    for attr in ('earnings_date', 'next_earnings_date'):
+        val = getattr(fi, attr, None)
+        if val:
+            r, d = check(val)
+            if r: return r, d
+except:
+    pass
+
+return None, None
+```
+
+# – IV scoring logic (exact from calculator.py) —————————–
 
 def filter_dates(dates):
 today = datetime.today().date()
@@ -190,12 +222,11 @@ raise ValueError(“No expiry within 45 days.”)
 def yang_zhang(price_data, window=30, trading_periods=252):
 log_ho = (price_data[‘High’]  / price_data[‘Open’]).apply(np.log)
 log_lo = (price_data[‘Low’]   / price_data[‘Open’]).apply(np.log)
-log_co = (price_data[‘Close’] / price_data[‘Open’]).apply(np.log)
 log_oc    = (price_data[‘Open’] / price_data[‘Close’].shift(1)).apply(np.log)
 log_oc_sq = log_oc ** 2
 log_cc    = (price_data[‘Close’] / price_data[‘Close’].shift(1)).apply(np.log)
 log_cc_sq = log_cc ** 2
-rs        = log_ho * (log_ho - log_co) + log_lo * (log_lo - log_co)
+rs        = log_ho * (log_ho - (price_data[‘Close’] / price_data[‘Open’]).apply(np.log)) + log_lo * (log_lo - (price_data[‘Close’] / price_data[‘Open’]).apply(np.log))
 close_vol = log_cc_sq.rolling(window, center=False).sum() / (window - 1)
 open_vol  = log_oc_sq.rolling(window, center=False).sum() / (window - 1)
 window_rs = rs.rolling(window, center=False).sum() / (window - 1)
@@ -203,122 +234,38 @@ k = 0.34 / (1.34 + (window + 1) / (window - 1))
 return ((open_vol + k * close_vol + (1 - k) * window_rs).apply(np.sqrt) * np.sqrt(trading_periods)).iloc[-1]
 
 def build_ts(days, ivs):
-days = np.array(days, dtype=float);  ivs = np.array(ivs, dtype=float)
-idx  = days.argsort();               days = days[idx];  ivs = ivs[idx]
+days = np.array(days, dtype=float)
+ivs  = np.array(ivs,  dtype=float)
+idx  = days.argsort()
+days = days[idx]; ivs = ivs[idx]
 def ts(dte):
-if   dte <= days[0]:   return float(ivs[0])
-elif dte >= days[-1]:  return float(ivs[-1])
-else:                  return float(np.interp(dte, days, ivs))
+if   dte <= days[0]:  return float(ivs[0])
+elif dte >= days[-1]: return float(ivs[-1])
+else:                 return float(np.interp(dte, days, ivs))
 return ts
-
-def _check_dates(dates, today):
-“”“Check a list of date-like values for upcoming earnings.”””
-for d in dates:
-try:
-dt   = pd.Timestamp(d).date()
-diff = (dt - today).days
-if 0 <= diff <= EARNINGS_WINDOW:
-return dt.strftime(”%b %d”), diff
-except:
-continue
-return None, None
-
-def get_earnings(stock):
-“”“Return (earnings_str, days_away) or (None, None).
-Tries multiple yfinance methods — calendar API changed between versions.”””
-today = datetime.today().date()
-
-```
-# Method 1: stock.calendar (returns dict or DataFrame depending on yfinance version)
-try:
-    cal = stock.calendar
-    if cal is not None:
-        dates = []
-        if isinstance(cal, dict):
-            raw = cal.get('Earnings Date') or cal.get('earningsDate') or []
-            if raw is not None:
-                dates = raw if hasattr(raw, '__iter__') and not isinstance(raw, str) else [raw]
-        elif isinstance(cal, pd.DataFrame):
-            for col in ['Earnings Date', 'earningsDate']:
-                if col in cal.columns:
-                    dates = cal[col].dropna().tolist(); break
-                if col in cal.index:
-                    dates = [cal.loc[col]]; break
-        result = _check_dates(dates, today)
-        if result[0]: return result
-except:
-    pass
-
-# Method 2: stock.get_earnings_dates() — returns DataFrame of past+future earnings
-try:
-    ed = stock.get_earnings_dates(limit=8)
-    if ed is not None and not ed.empty:
-        future = [idx for idx in ed.index if pd.Timestamp(idx).date() >= today]
-        result = _check_dates(sorted(future), today)
-        if result[0]: return result
-except:
-    pass
-
-# Method 3: stock.earnings_dates property
-try:
-    ed = stock.earnings_dates
-    if ed is not None and not ed.empty:
-        future = [idx for idx in ed.index if pd.Timestamp(idx).date() >= today]
-        result = _check_dates(sorted(future), today)
-        if result[0]: return result
-except:
-    pass
-
-# Method 4: stock.info dict fields
-try:
-    info = stock.info
-    for key in ('earningsDate', 'earningsTimestamp', 'nextEarningsDate'):
-        val = info.get(key)
-        if val:
-            try:
-                # earningsTimestamp is a Unix timestamp int
-                if isinstance(val, (int, float)):
-                    dt = datetime.fromtimestamp(val).date()
-                else:
-                    dt = pd.Timestamp(val).date()
-                diff = (dt - today).days
-                if 0 <= diff <= EARNINGS_WINDOW:
-                    return dt.strftime("%b %d"), diff
-            except:
-                pass
-except:
-    pass
-
-return None, None
-```
 
 def score_ticker(sym):
 try:
-stock = yf.Ticker(sym)
+earn_str, earn_days = get_earnings_date(sym)
+if earn_str is None:
+return None
 
 ```
-    # Quick earnings check first
-    earn_str, earn_days = get_earnings(stock)
-    if earn_str is None:
-        return None
+    stock = yf.Ticker(sym)
 
     # Price
     h1 = stock.history(period="1d")
-    if h1.empty:
-        return None
+    if h1.empty: return None
     price = float(h1['Close'].iloc[-1])
-    if price <= 0:
-        return None
+    if price <= 0: return None
 
     # Options
-    if not stock.options or len(stock.options) < 2:
-        return None
+    if not stock.options or len(stock.options) < 2: return None
     try:
         exp_dates = filter_dates(list(stock.options))
     except:
         return None
-    if len(exp_dates) < 2:
-        return None
+    if len(exp_dates) < 2: return None
 
     # Build IV term structure
     today = datetime.today().date()
@@ -326,30 +273,28 @@ stock = yf.Ticker(sym)
 
     for i, exp in enumerate(exp_dates):
         try:
-            ch   = stock.option_chain(exp)
+            ch = stock.option_chain(exp)
             c, p = ch.calls, ch.puts
-            if c.empty or p.empty:
-                continue
+            if c.empty or p.empty: continue
             ci = (c['strike'] - price).abs().idxmin()
             pi = (p['strike'] - price).abs().idxmin()
             atm_iv = (c.loc[ci,'impliedVolatility'] + p.loc[pi,'impliedVolatility']) / 2
             dte = (datetime.strptime(exp, "%Y-%m-%d").date() - today).days
-            dtes.append(dte);  ivs.append(atm_iv)
+            dtes.append(dte); ivs.append(atm_iv)
             if i == 0:
-                straddle = (c.loc[ci,'bid'] + c.loc[ci,'ask']) / 2 + (p.loc[pi,'bid'] + p.loc[pi,'ask']) / 2
+                straddle = ((c.loc[ci,'bid'] + c.loc[ci,'ask']) / 2 +
+                            (p.loc[pi,'bid'] + p.loc[pi,'ask']) / 2)
         except:
             continue
 
-    if len(dtes) < 2:
-        return None
+    if len(dtes) < 2: return None
 
     ts = build_ts(dtes, ivs)
 
-    # Exact thresholds
+    # Exact thresholds from calculator.py
     slope  = (ts(45) - ts(dtes[0])) / (45 - dtes[0])
     h3     = stock.history(period="3mo")
-    if h3.empty or len(h3) < 30:
-        return None
+    if h3.empty or len(h3) < 30: return None
     ivrv   = ts(30) / yang_zhang(h3)
     avgvol = h3['Volume'].rolling(30).mean().dropna().iloc[-1]
 
@@ -361,7 +306,6 @@ stock = yf.Ticker(sym)
            "CONSIDER"    if c1 and (c2 or c3) else
            "AVOID")
 
-    # Strike
     s = price
     strike = (round(s*2)/2 if s<20 else round(s) if s<50 else
               round(s/5)*5 if s<200 else round(s/10)*10 if s<500 else round(s/25)*25)
@@ -369,9 +313,9 @@ stock = yf.Ticker(sym)
     debit = round(price * ts(dtes[0]) * (max(dtes[0],1)/365)**0.5 * 0.4, 2)
 
     try:
-        fi  = stock.fast_info
+        fi     = stock.fast_info
         name   = getattr(fi, 'company_name', None) or sym
-        sector = getattr(fi, 'sector', None) or ""
+        sector = ""
     except:
         name, sector = sym, ""
 
@@ -395,9 +339,9 @@ stock = yf.Ticker(sym)
         "tsSlope":        round(float(slope), 6),
         "ivRv":           round(float(ivrv), 3),
         "avgVol":         int(avgvol),
-        "expectedMove":   round((straddle / price) * 100, 2) if straddle else None,
-        "frontIV":        round(ts(dtes[0]) * 100, 1),
-        "backIV":         round(ts(45) * 100, 1),
+        "expectedMove":   round((straddle/price)*100, 2) if straddle else None,
+        "frontIV":        round(ts(dtes[0])*100, 1),
+        "backIV":         round(ts(45)*100, 1),
         "strike":         strike,
         "frontExp":       exp_dates[0],
         "backExp":        exp_dates[min(1, len(exp_dates)-1)],
@@ -406,20 +350,19 @@ stock = yf.Ticker(sym)
         "exitDate":       earn_str,
     }
 except Exception as e:
-    log.debug(f"{sym}: {e}")
+    log.debug("%s: %s", sym, e)
     return None
 ```
 
-# ── Scan runner ───────────────────────────────────────────────────────────────
+# – Scan runner ———————————————————––
 
 def run_scan():
-if _cache[“running”]:
-return
+if _cache[“running”]: return
 _cache[“running”] = True
 universe = build_universe()
 _cache[“universe”] = universe
 _cache[“progress”] = {“done”: 0, “total”: len(universe), “phase”: “scanning”}
-log.info(f”Scanning {len(universe)} tickers…”)
+log.info(“Scanning %d tickers…”, len(universe))
 
 ```
 results = []
@@ -429,8 +372,7 @@ def scan_one(sym):
     r = score_ticker(sym)
     with lock:
         _cache["progress"]["done"] += 1
-        if r:
-            results.append(r)
+        if r: results.append(r)
 
 with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
     futs = {pool.submit(scan_one, sym): sym for sym in universe}
@@ -440,12 +382,11 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
 
 order = {"RECOMMENDED": 0, "CONSIDER": 1, "AVOID": 2}
 results.sort(key=lambda x: (order.get(x["rec"], 3), x["daysToEarnings"]))
-
 _cache["results"]  = results
 _cache["ts"]       = time.time()
 _cache["running"]  = False
 _cache["progress"] = {"done": len(universe), "total": len(universe), "phase": "done"}
-log.info(f"Done. {len(results)} earnings setups from {len(universe)} tickers.")
+log.info("Done. %d earnings setups from %d tickers.", len(results), len(universe))
 ```
 
 def get_or_refresh():
@@ -455,7 +396,7 @@ elif time.time() - _cache[“ts”] > CACHE_TTL and not _cache[“running”]:
 threading.Thread(target=run_scan, daemon=True).start()
 return _cache[“results”]
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# – Routes ——————————————————————
 
 @app.route(”/api/scan”)
 def api_scan():
@@ -464,7 +405,7 @@ return jsonify({
 “results”:      data or [],
 “count”:        len(data) if data else 0,
 “scannedAt”:    datetime.fromtimestamp(_cache[“ts”]).strftime(”%b %d %Y, %I:%M %p”) if _cache[“ts”] else None,
-“ageMinutes”:   int((time.time() - _cache[“ts”]) / 60) if _cache[“ts”] else 0,
+“ageMinutes”:   int((time.time()-_cache[“ts”])/60) if _cache[“ts”] else 0,
 “isRefreshing”: _cache[“running”],
 “universe”:     len(_cache[“universe”]),
 “progress”:     _cache[“progress”],
@@ -472,33 +413,58 @@ return jsonify({
 
 @app.route(”/api/progress”)
 def api_progress():
-p   = _cache[“progress”]
-pct = int(p[“done”] / p[“total”] * 100) if p[“total”] > 0 else 0
-return jsonify({“done”: p[“done”], “total”: p[“total”], “pct”: pct,
-“phase”: p[“phase”], “running”: _cache[“running”]})
+p = _cache[“progress”]
+pct = int(p[“done”]/p[“total”]*100) if p[“total”] > 0 else 0
+return jsonify({“done”:p[“done”],“total”:p[“total”],“pct”:pct,“phase”:p[“phase”],“running”:_cache[“running”]})
 
 @app.route(”/api/status”)
 def api_status():
-return jsonify({“status”: “ok”, “cached”: _cache[“results”] is not None,
-“count”: len(_cache[“results”]) if _cache[“results”] else 0,
-“ageMinutes”: int((time.time()-_cache[“ts”])/60) if _cache[“ts”] else None,
-“running”: _cache[“running”], “universe”: len(_cache[“universe”]),
-“progress”: _cache[“progress”]})
+return jsonify({“status”:“ok”,“cached”:_cache[“results”] is not None,
+“count”:len(_cache[“results”]) if _cache[“results”] else 0,
+“ageMinutes”:int((time.time()-_cache[“ts”])/60) if _cache[“ts”] else None,
+“running”:_cache[“running”],“universe”:len(_cache[“universe”]),
+“progress”:_cache[“progress”]})
 
 @app.route(”/api/refresh”, methods=[“POST”])
 def api_refresh():
 if _cache[“running”]:
-return jsonify({“message”: “Scan already in progress”, “progress”: _cache[“progress”]}), 202
+return jsonify({“message”:“Scan already in progress”,“progress”:_cache[“progress”]}), 202
 threading.Thread(target=run_scan, daemon=True).start()
-return jsonify({“message”: “Refresh started”}), 202
+return jsonify({“message”:“Refresh started”}), 202
+
+@app.route(”/api/debug/<sym>”)
+def api_debug(sym):
+“”“Debug endpoint - shows what yfinance returns for a ticker.”””
+sym = sym.upper()
+stock = yf.Ticker(sym)
+out = {“ticker”: sym, “methods”: {}}
+try:
+ed = stock.get_earnings_dates(limit=6)
+out[“methods”][“get_earnings_dates”] = str(ed.index.tolist()[:6]) if ed is not None and not ed.empty else “empty”
+except Exception as e:
+out[“methods”][“get_earnings_dates”] = “error: “ + str(e)
+try:
+cal = stock.calendar
+out[“methods”][“calendar”] = str(cal)[:300] if cal is not None else “None”
+except Exception as e:
+out[“methods”][“calendar”] = “error: “ + str(e)
+try:
+info = stock.info
+out[“methods”][“info_earningsDate”] = str(info.get(“earningsDate”))
+out[“methods”][“info_earningsTimestamp”] = str(info.get(“earningsTimestamp”))
+except Exception as e:
+out[“methods”][“info”] = “error: “ + str(e)
+earn_str, earn_days = get_earnings_date(sym)
+out[“result”] = {“earn_str”: earn_str, “earn_days”: earn_days}
+return jsonify(out)
 
 @app.route(”/”)
 def index():
 p = _cache[“progress”]
-return (f”VV Scanner API — {len(_cache[‘universe’])} ticker universe | “
-f”{len(_cache[‘results’]) if _cache[‘results’] else 0} setups found | “
+return (f”VV Scanner API | Universe: {len(_cache[‘universe’])} | “
+f”Results: {len(_cache[‘results’]) if _cache[‘results’] else 0} | “
 f”Running: {_cache[‘running’]} ({p[‘done’]}/{p[‘total’]}) | “
-f”Use /api/scan”)
+f”Debug a ticker: /api/debug/AAPL”)
 
 if **name** == “**main**”:
 threading.Thread(target=run_scan, daemon=True).start()
