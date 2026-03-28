@@ -244,7 +244,8 @@
 
   window.addEventListener("DOMContentLoaded", () => { loadScan(); });
 
-  async function loadScan() {
+  async function loadScan(attempt) {
+    attempt = attempt || 1;
     showLoading();
     startProgressPoll();
     try {
@@ -252,12 +253,26 @@
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
       stopProgressPoll();
+      // If scan is still running, poll until done
+      if (data.isRefreshing || (data.count === 0 && data.scannedAt === null)) {
+        stopProgressPoll();
+        document.getElementById("load-title").textContent = "Scan in progress, waiting...";
+        await sleep(8000);
+        return loadScan(attempt);
+      }
       allResults = data.results || [];
       updateFilterCounts();
       renderResults();
       showStatusBar(data);
     } catch(e) {
       stopProgressPoll();
+      if (attempt < 5) {
+        // Server spinning up - retry after delay
+        document.getElementById("load-title").textContent = "Connecting... (attempt " + attempt + "/5)";
+        document.getElementById("progress-wrap").style.display = "none";
+        await sleep(10000);
+        return loadScan(attempt + 1);
+      }
       showError(e.message);
     }
   }
@@ -293,10 +308,15 @@
     startProgressPoll();
     try {
       await fetch(API_BASE + "/api/refresh", {method:"POST"});
-      for (let i = 0; i < 120; i++) {
-        await sleep(3000);
-        const s = await fetch(API_BASE + "/api/status").then(r => r.json());
-        if (!s.running) break;
+      for (let i = 0; i < 200; i++) {
+        await sleep(5000);
+        try {
+          const s = await fetch(API_BASE + "/api/status").then(r => r.json());
+          if (!s.running) break;
+        } catch(e) {
+          // Server may have restarted, keep waiting
+          await sleep(10000);
+        }
       }
       stopProgressPoll();
       await loadScan();
