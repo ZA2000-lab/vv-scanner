@@ -434,6 +434,47 @@
     '</div>';
   }
 
+  function pnlBlockHTML(r) {
+    const debit     = r.debitEst || 0;
+    const costPer   = (debit * 100).toFixed(2);
+    // 50% profit target (standard calendar management rule)
+    const tgt50pct  = (debit * 100 * 0.50).toFixed(2);
+    // Avg return from backtest = 7.3% of debit
+    const avgReturn = (debit * 100 * 0.073 / debit * debit).toFixed(2);
+    const avgPct    = "7.3";
+    // Max profit estimate = ~80% of debit (IV crush but back month retains some)
+    const maxProfit = (debit * 100 * 0.80).toFixed(2);
+    const maxPct    = "80";
+    // Stop loss = 2x debit = lose 100% of contract value
+    const stopLoss  = (debit * 100).toFixed(2);
+    // How many contracts for $5k, $10k, $25k accounts at 6%
+    const accts = [5000, 10000, 25000];
+    const contractRows = accts.map(a => {
+      const budget = a * 0.06;
+      const contracts = Math.max(1, Math.floor(budget / (debit * 100)));
+      const totalCost = (contracts * debit * 100).toFixed(0);
+      const proj50    = (contracts * debit * 100 * 0.50).toFixed(0);
+      return '<div class="timing-row">' +
+        '<span class="timing-label">$' + a.toLocaleString() + ' acct</span>' +
+        '<span>' + contracts + ' contract' + (contracts !== 1 ? 's' : '') +
+        ' &middot; cost <strong style=\'color:var(--yellow)\'>$' + totalCost + '</strong>' +
+        ' &middot; 50% target <strong style=\'color:var(--green)\'>+$' + proj50 + '</strong></span>' +
+        '</div>';
+    }).join('');
+    return '<div class="trade-block">' +
+      '<div class="block-title" style="color:var(--purple)">&#36; P&amp;L Per Contract</div>' +
+      '<div class="timing-row"><span class="timing-label">Cost / contract</span><strong style="color:var(--yellow)">$' + costPer + '</strong><span style="color:var(--dim);font-size:10px;margin-left:6px">(debit &times; 100 shares)</span></div>' +
+      '<div class="timing-row"><span class="timing-label">50% target profit</span><strong style="color:var(--green)">+$' + tgt50pct + ' &nbsp;(+50%)</strong></div>' +
+      '<div class="timing-row"><span class="timing-label">Backtest avg return</span><strong style="color:var(--green)">+$' + (debit*100*0.073).toFixed(2) + ' &nbsp;(+' + avgPct + '%)</strong></div>' +
+      '<div class="timing-row"><span class="timing-label">Max profit est.</span><strong style="color:var(--green)">+$' + maxProfit + ' &nbsp;(+' + maxPct + '%)</strong></div>' +
+      '<div class="timing-row"><span class="timing-label">Stop loss</span><strong style="color:var(--red)">-$' + stopLoss + ' &nbsp;(-100%)</strong></div>' +
+      '<div style="border-top:1px solid var(--border);margin:8px 0;padding-top:8px">' +
+        '<div style="font-size:9px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:7px">Position sizing at 6% risk</div>' +
+        contractRows +
+      '</div>' +
+    '</div>';
+  }
+
   function expandedHTML(r, cfg) {
     const verdict = r.rec === "RECOMMENDED"
       ? "All 3 conditions confirmed with live data. High-probability IV crush setup."
@@ -466,6 +507,7 @@
         '<div class="timing-row"><span class="timing-label">Win rate</span><strong style="color:var(--green)">~66% (when all 3 met)</strong></div>' +
         '<div class="timing-row"><span class="timing-label">Front IV</span><span>' + r.frontIV + '% &middot; Back IV ' + r.backIV + '%</span></div>' +
       '</div>' +
+      pnlBlockHTML(r) +
       '<div class="verify-note">Live data via Yahoo Finance &middot; Thresholds: slope &le; -0.00406 &middot; IV/RV &ge; 1.25 &middot; vol &ge; 1.5M</div>' +
     '</div>';
   }
