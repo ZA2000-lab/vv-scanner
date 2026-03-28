@@ -179,12 +179,12 @@
         <div id="progress-track"><div id="progress-bar"></div></div>
         <div id="progress-label"></div>
       </div>
-      <div class="load-step">&rsaquo; Fetching S&amp;P 500 + Nasdaq 100 + supplemental universe</div>
-      <div class="load-step">&rsaquo; Checking earnings calendars for all tickers</div>
-      <div class="load-step">&rsaquo; Pulling live options chains (8 parallel threads)</div>
+      <div class="load-step">&rsaquo; Fetching Nasdaq earnings calendar (next 35 days)</div>
+      <div class="load-step">&rsaquo; Filtering to liquid tickers with options</div>
+      <div class="load-step">&rsaquo; Pulling live options chains (~150 tickers)</div>
       <div class="load-step">&rsaquo; Computing term structure slopes</div>
       <div class="load-step">&rsaquo; Calculating IV30/RV30 ratios</div>
-      <div class="load-step">&rsaquo; Scoring &amp; ranking setups</div>
+      <div class="load-step">&rsaquo; Scoring &amp; ranking setups (4-8 min)</div>
     </div>
     <div id="results"   style="display:none"></div>
     <div id="error-box" style="display:none"></div>
@@ -271,7 +271,8 @@
           document.getElementById("progress-wrap").style.display = "";
           document.getElementById("progress-bar").style.width = p.pct + "%";
           document.getElementById("progress-label").textContent = p.done + " / " + p.total + " tickers scanned (" + p.pct + "%)";
-          document.getElementById("load-title").textContent = p.phase === "done" ? "Finalizing results..." : "Scanning earnings calendar...";
+          var phaseLabel = {"calendar":"Fetching earnings calendar...","scoring":"Scoring options chains...","done":"Finalizing results..."};
+          document.getElementById("load-title").textContent = phaseLabel[p.phase] || "Scanning earnings calendar...";
         }
       } catch(e) {}
     }, 1500);
