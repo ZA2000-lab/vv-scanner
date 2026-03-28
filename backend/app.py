@@ -1,5 +1,5 @@
-# VV Scanner Backend - Full Market Edition
-# Strategy: pull Yahoo earnings calendar first, then score only upcoming earners
+# VV Scanner Backend
+# Uses Nasdaq earnings calendar (no rate limits) + yfinance for IV data
 
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -28,113 +28,200 @@ _cache = {
     'ts':       0,
     'running':  False,
     'progress': {'done': 0, 'total': 0, 'phase': 'idle'},
+    'debug':    {},
 }
 
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'application/json',
+NASDAQ_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Origin': 'https://www.nasdaq.com',
+    'Referer': 'https://www.nasdaq.com/market-activity/earnings',
 }
 
 
-def get_yahoo_earnings_calendar(days_ahead=50):
-    # Fetch upcoming earnings directly from Yahoo Finance calendar API
-    # Returns dict: {ticker: (date_str, days_away)}
+def fetch_nasdaq_calendar(days_ahead=50):
+    # Nasdaq earnings calendar API - no auth, generous rate limits
+    # Returns {ticker: (date_str, days_away)}
     earnings_map = {}
     today = date.today()
-    
-    for week_offset in range(0, days_ahead, 7):
+
+    for offset in range(0, days_ahead, 1):
+        target = today + timedelta(days=offset)
+        date_str = target.strftime('%Y-%m-%d')
         try:
-            from_date = today + timedelta(days=week_offset)
-            to_date   = min(today + timedelta(days=week_offset+6), today + timedelta(days=days_ahead))
-            url = (f'https://query2.finance.yahoo.com/v1/finance/earning_reports/upcoming'
-                   f'?period1={int(datetime.combine(from_date, datetime.min.time()).timestamp())}'
-                   f'&period2={int(datetime.combine(to_date, datetime.max.time()).timestamp())}')
-            resp = requests.get(url, headers=HEADERS, timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                reports = (data.get('upcomingEarningReports', {}).get('earningReports', [])
-                           or data.get('earningReports', [])
-                           or [])
-                for r in reports:
-                    try:
-                        sym = r.get('ticker', '').upper()
-                        ts  = r.get('startdatetimetype') or r.get('startDateTime')
-                        if sym and ts:
-                            dt   = pd.Timestamp(ts).date()
-                            diff = (dt - today).days
-                            if 0 <= diff <= days_ahead and sym not in earnings_map:
-                                earnings_map[sym] = (dt.strftime('%b %d'), diff)
-                    except:
-                        continue
-            time.sleep(0.5)
+            url = f'https://api.nasdaq.com/api/calendar/earnings?date={date_str}'
+            resp = requests.get(url, headers=NASDAQ_HEADERS, timeout=10)
+            if resp.status_code != 200:
+                continue
+            data = resp.json()
+            rows = (data.get('data', {}).get('rows') or
+                    data.get('data', {}).get('earningsCalendar', {}).get('rows') or [])
+            for row in rows:
+                try:
+                    sym = (row.get('symbol') or row.get('ticker') or '').upper().strip()
+                    if not sym or len(sym) > 6: continue
+                    diff = (target - today).days
+                    if sym not in earnings_map:
+                        earnings_map[sym] = (target.strftime('%b %d'), diff)
+                except:
+                    continue
+            time.sleep(0.2)
         except Exception as e:
-            log.warning('Calendar week fetch failed: %s', e)
+            log.warning('Nasdaq calendar %s failed: %s', date_str, e)
             continue
-    
-    log.info('Yahoo calendar: %d upcoming earnings found', len(earnings_map))
+
+    log.info('Nasdaq calendar: %d tickers with upcoming earnings', len(earnings_map))
+    _cache['debug']['nasdaq_count'] = len(earnings_map)
+    _cache['debug']['sample'] = list(earnings_map.items())[:5]
     return earnings_map
 
 
-def get_earnings_yfinance(sym):
-    # Fallback: try multiple yfinance methods for a single ticker
+def fetch_wallstreetmojo_calendar(days_ahead=50):
+    # Alternative: TheStreet/Zacks-style free calendar
+    # Try marketbeat earnings calendar as backup
+    earnings_map = {}
     today = date.today()
-    stock = yf.Ticker(sym)
-    
-    def check(val):
+    try:
+        url = 'https://www.wisesheets.io/earnings-calendar-api'
+        resp = requests.get(url, timeout=8)
+        if resp.status_code == 200:
+            data = resp.json()
+            for item in data:
+                try:
+                    sym  = item.get('symbol','').upper().strip()
+                    dstr = item.get('date','')
+                    if not sym or not dstr: continue
+                    dt   = datetime.strptime(dstr[:10], '%Y-%m-%d').date()
+                    diff = (dt - today).days
+                    if 0 <= diff <= days_ahead and sym not in earnings_map:
+                        earnings_map[sym] = (dt.strftime('%b %d'), diff)
+                except:
+                    continue
+    except:
+        pass
+    return earnings_map
+
+
+def fetch_earningswhispers_calendar(days_ahead=50):
+    # EarningsWhispers has a free JSON feed
+    earnings_map = {}
+    today = date.today()
+    try:
+        url = 'https://www.earningswhispers.com/api/earningscal'
+        resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            for item in (data if isinstance(data, list) else []):
+                try:
+                    sym  = item.get('ticker','').upper().strip()
+                    dstr = item.get('epsdate','') or item.get('date','')
+                    if not sym or not dstr: continue
+                    dt   = datetime.strptime(dstr[:10], '%Y-%m-%d').date()
+                    diff = (dt - today).days
+                    if 0 <= diff <= days_ahead and sym not in earnings_map:
+                        earnings_map[sym] = (dt.strftime('%b %d'), diff)
+                except:
+                    continue
+    except:
+        pass
+    return earnings_map
+
+
+def fetch_yfinance_batch(syms, days_ahead=50):
+    # Slow but reliable fallback - checks one ticker at a time with delays
+    earnings_map = {}
+    today = date.today()
+
+    def check_ts(val):
         try:
             if isinstance(val, (int, float)):
                 dt = date.fromtimestamp(val)
             else:
                 ts = pd.Timestamp(val)
-                # Handle timezone-aware timestamps
-                if ts.tzinfo is not None:
+                if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
                     ts = ts.tz_convert('UTC').tz_localize(None)
                 dt = ts.date()
             diff = (dt - today).days
-            if 0 <= diff <= 60:
+            if 0 <= diff <= days_ahead:
                 return dt.strftime('%b %d'), diff
         except:
             pass
         return None, None
 
-    # Try info dict first - most reliable
-    try:
-        info = stock.info
-        for key in ('earningsDate', 'earningsTimestamp'):
-            val = info.get(key)
-            if val:
-                items = val if isinstance(val, list) else [val]
-                for item in items:
-                    r, d = check(item)
-                    if r: return r, d
-    except:
-        pass
+    for sym in syms:
+        try:
+            stock = yf.Ticker(sym)
+            found = False
 
-    # Try get_earnings_dates
-    try:
-        ed = stock.get_earnings_dates(limit=10)
-        if ed is not None and not ed.empty:
-            for idx in sorted(ed.index):
-                r, d = check(idx)
-                if r: return r, d
-    except:
-        pass
-
-    # Try calendar
-    try:
-        cal = stock.calendar
-        if isinstance(cal, dict):
-            for key in ('Earnings Date', 'earningsDate'):
-                raw = cal.get(key)
-                if raw:
-                    items = list(raw) if hasattr(raw, '__iter__') and not isinstance(raw, str) else [raw]
+            # Try info - single request, includes earningsDate
+            try:
+                info = stock.info
+                val = info.get('earningsDate')
+                if val:
+                    items = val if isinstance(val, list) else [val]
                     for item in items:
-                        r, d = check(item)
-                        if r: return r, d
-    except:
-        pass
+                        r, d = check_ts(item)
+                        if r:
+                            earnings_map[sym] = (r, d)
+                            found = True
+                            break
+            except:
+                pass
 
-    return None, None
+            if not found:
+                try:
+                    ed = stock.get_earnings_dates(limit=6)
+                    if ed is not None and not ed.empty:
+                        for idx in sorted(ed.index):
+                            r, d = check_ts(idx)
+                            if r:
+                                earnings_map[sym] = (r, d)
+                                found = True
+                                break
+                except:
+                    pass
+
+            time.sleep(0.5)  # Gentle rate limiting
+        except:
+            pass
+
+    log.info('yfinance batch: %d/%d found earnings', len(earnings_map), len(syms))
+    return earnings_map
+
+
+def get_earnings_calendar(days_ahead=50):
+    # Try sources in order of reliability
+    log.info('Fetching earnings calendar...')
+
+    # Primary: Nasdaq API
+    earnings_map = fetch_nasdaq_calendar(days_ahead)
+    if len(earnings_map) >= 10:
+        return earnings_map
+
+    log.warning('Nasdaq calendar returned %d results, trying alternatives...', len(earnings_map))
+
+    # Secondary: EarningsWhispers
+    em2 = fetch_earningswhispers_calendar(days_ahead)
+    earnings_map.update(em2)
+    if len(earnings_map) >= 10:
+        return earnings_map
+
+    log.warning('Still only %d results, falling back to yfinance batch...', len(earnings_map))
+
+    # Last resort: yfinance one-by-one on core liquid universe
+    core = [
+        'AAPL','MSFT','NVDA','AMZN','META','GOOGL','TSLA','NFLX','AMD',
+        'JPM','BAC','WFC','GS','MS','V','MA','COIN','SOFI','PYPL',
+        'UNH','LLY','ABBV','MRK','PFE','AMGN','MRNA',
+        'HD','WMT','COST','MCD','SBUX','BKNG','UBER',
+        'XOM','CVX','BA','CAT','GE','RTX','LMT','UPS',
+        'DIS','SNAP','PLTR','CRWD','NET','DDOG','NOW','CRM',
+        'MARA','RIOT','MSTR','GME','DAL','AAL','CCL','MGM',
+    ]
+    em3 = fetch_yfinance_batch(core, days_ahead)
+    earnings_map.update(em3)
+    return earnings_map
 
 
 def filter_dates(dates):
@@ -182,7 +269,6 @@ def build_ts(days, ivs):
 def score_ticker(sym, earn_str, earn_days):
     try:
         stock = yf.Ticker(sym)
-        
         h1 = stock.history(period='1d')
         if h1.empty: return None
         price = float(h1['Close'].iloc[-1])
@@ -277,41 +363,22 @@ def score_ticker(sym, earn_str, earn_days):
 def run_scan():
     if _cache['running']: return
     _cache['running'] = True
-    _cache['progress'] = {'done': 0, 'total': 0, 'phase': 'fetching_calendar'}
+    _cache['progress'] = {'done': 0, 'total': 0, 'phase': 'calendar'}
 
-    # Step 1: get earnings calendar from Yahoo (one API call gets all upcoming earners)
-    log.info('Step 1: fetching Yahoo earnings calendar...')
-    earnings_map = get_yahoo_earnings_calendar(days_ahead=50)
+    earnings_map = get_earnings_calendar(days_ahead=50)
 
-    # Step 2: if Yahoo calendar API failed, fall back to yfinance per-ticker
-    if len(earnings_map) < 5:
-        log.info('Yahoo calendar returned %d results, falling back to yfinance per-ticker...', len(earnings_map))
-        # Build a universe of liquid stocks to check
-        fallback_universe = [
-            'AAPL','MSFT','NVDA','AMZN','META','GOOGL','TSLA','NFLX','AMD','ORCL',
-            'JPM','BAC','WFC','GS','MS','C','V','MA','AXP','COIN','HOOD','SOFI',
-            'UNH','JNJ','LLY','ABBV','MRK','PFE','AMGN','GILD','VRTX','MRNA',
-            'HD','WMT','COST','MCD','SBUX','NKE','TGT','LOW','BKNG','ABNB','UBER',
-            'XOM','CVX','COP','BA','CAT','DE','GE','HON','RTX','LMT','UPS','FDX',
-            'DIS','CMCSA','SNAP','PINS','SPOT','BABA','JD','NIO','PLTR','CRWD',
-            'PANW','NET','DDOG','SNOW','NOW','CRM','SHOP','MELI','MARA','RIOT','MSTR',
-            'TSLA','RIVN','F','GM','DAL','AAL','CCL','MGM','WYNN','DKNG',
-        ]
-        _cache['universe'] = fallback_universe
-        _cache['progress'] = {'done': 0, 'total': len(fallback_universe), 'phase': 'scanning'}
-        for sym in fallback_universe:
-            earn_str, earn_days = get_earnings_yfinance(sym)
-            if earn_str:
-                earnings_map[sym] = (earn_str, earn_days)
-            _cache['progress']['done'] += 1
-            time.sleep(0.3)
-        log.info('Fallback found %d upcoming earners', len(earnings_map))
+    if not earnings_map:
+        log.error('No earnings found from any source')
+        _cache['running'] = False
+        _cache['results'] = []
+        _cache['ts'] = time.time()
+        _cache['progress'] = {'done': 0, 'total': 0, 'phase': 'done'}
+        return
 
-    # Step 3: score each ticker that has upcoming earnings
-    tickers_to_score = list(earnings_map.keys())
-    _cache['universe'] = tickers_to_score
-    _cache['progress'] = {'done': 0, 'total': len(tickers_to_score), 'phase': 'scoring'}
-    log.info('Step 3: scoring %d upcoming earners...', len(tickers_to_score))
+    tickers = list(earnings_map.keys())
+    _cache['universe'] = tickers
+    _cache['progress'] = {'done': 0, 'total': len(tickers), 'phase': 'scoring'}
+    log.info('Scoring %d tickers...', len(tickers))
 
     results = []
     lock = threading.Lock()
@@ -324,7 +391,7 @@ def run_scan():
             if r: results.append(r)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        futs = {pool.submit(score_one, sym): sym for sym in tickers_to_score}
+        futs = {pool.submit(score_one, sym): sym for sym in tickers}
         for f in concurrent.futures.as_completed(futs):
             try: f.result()
             except: pass
@@ -334,8 +401,8 @@ def run_scan():
     _cache['results']  = results
     _cache['ts']       = time.time()
     _cache['running']  = False
-    _cache['progress'] = {'done': len(tickers_to_score), 'total': len(tickers_to_score), 'phase': 'done'}
-    log.info('Done. %d scored setups from %d earners.', len(results), len(tickers_to_score))
+    _cache['progress'] = {'done': len(tickers), 'total': len(tickers), 'phase': 'done'}
+    log.info('Done. %d results from %d earners.', len(results), len(tickers))
 
 
 def get_or_refresh():
@@ -378,42 +445,30 @@ def api_status():
 @app.route('/api/refresh', methods=['POST'])
 def api_refresh():
     if _cache['running']:
-        return jsonify({'message':'Scan already in progress'}), 202
+        return jsonify({'message':'Scan in progress'}), 202
     threading.Thread(target=run_scan, daemon=True).start()
     return jsonify({'message':'Refresh started'}), 202
 
 
 @app.route('/api/debug')
 def api_debug():
-    sym = 'AAPL'
-    out = {'yfinance_version': yf.__version__, 'methods': {}}
-    stock = yf.Ticker(sym)
+    out = {'debug': _cache.get('debug',{}), 'universe_size': len(_cache['universe']),
+           'results': len(_cache['results']) if _cache['results'] else 0,
+           'running': _cache['running'], 'progress': _cache['progress']}
+    # Test Nasdaq calendar for today
     try:
-        ed = stock.get_earnings_dates(limit=4)
-        out['methods']['get_earnings_dates'] = str(ed.index.tolist()[:4]) if ed is not None and not ed.empty else 'empty'
+        url = f'https://api.nasdaq.com/api/calendar/earnings?date={date.today().strftime("%Y-%m-%d")}'
+        resp = requests.get(url, headers=NASDAQ_HEADERS, timeout=8)
+        out['nasdaq_test'] = {'status': resp.status_code, 'body': resp.text[:400]}
     except Exception as e:
-        out['methods']['get_earnings_dates'] = 'error:' + str(e)
-    try:
-        info = stock.info
-        out['methods']['info_earningsDate'] = str(info.get('earningsDate'))
-    except Exception as e:
-        out['methods']['info'] = 'error:' + str(e)
-    try:
-        cal_resp = requests.get(
-            'https://query2.finance.yahoo.com/v1/finance/earning_reports/upcoming?period1=1743120000&period2=1745712000',
-            headers=HEADERS, timeout=8)
-        out['calendar_api'] = {'status': cal_resp.status_code, 'body': str(cal_resp.text)[:500]}
-    except Exception as e:
-        out['calendar_api'] = 'error:' + str(e)
-    earn_str, earn_days = get_earnings_yfinance(sym)
-    out['aapl_result'] = {'earn_str': earn_str, 'earn_days': earn_days}
+        out['nasdaq_test'] = 'error: ' + str(e)
     return jsonify(out)
 
 
 @app.route('/')
 def index():
     p = _cache['progress']
-    return (f'VV Scanner | Universe: {len(_cache["universe"])} | '
+    return (f'VV Scanner | Universe: {len(_cache["universe"])} earners | '
             f'Results: {len(_cache["results"]) if _cache["results"] else 0} | '
             f'Running: {_cache["running"]} ({p["done"]}/{p["total"]}) | '
             f'Debug: /api/debug')
