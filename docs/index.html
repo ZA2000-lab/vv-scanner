@@ -244,37 +244,61 @@
 
   window.addEventListener("DOMContentLoaded", () => { loadScan(); });
 
-  async function loadScan(attempt) {
-    attempt = attempt || 1;
+  async function loadScan() {
     showLoading();
-    startProgressPoll();
+    // Kick off scan then poll — never wait on one long request
     try {
       const res = await fetch(API_BASE + "/api/scan");
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
-      stopProgressPoll();
-      // If scan is still running, poll until done
-      if (data.isRefreshing || (data.count === 0 && data.scannedAt === null)) {
+      if (data.isRefreshing || data.progress.phase !== "done") {
+        // Scan running - show partial results and keep polling
+        if (data.results && data.results.length > 0) {
+          allResults = data.results;
+          updateFilterCounts();
+          renderResults();
+          showStatusBar(data);
+        }
+        startProgressPoll();
+        pollForResults();
+      } else {
         stopProgressPoll();
-        document.getElementById("load-title").textContent = "Scan in progress, waiting...";
-        await sleep(8000);
-        return loadScan(attempt);
+        allResults = data.results || [];
+        updateFilterCounts();
+        renderResults();
+        showStatusBar(data);
       }
-      allResults = data.results || [];
-      updateFilterCounts();
-      renderResults();
-      showStatusBar(data);
     } catch(e) {
-      stopProgressPoll();
-      if (attempt < 5) {
-        // Server spinning up - retry after delay
-        document.getElementById("load-title").textContent = "Connecting... (attempt " + attempt + "/5)";
-        document.getElementById("progress-wrap").style.display = "none";
-        await sleep(10000);
-        return loadScan(attempt + 1);
-      }
-      showError(e.message);
+      showLoading();
+      document.getElementById("load-title").textContent = "Connecting to server...";
+      await sleep(8000);
+      loadScan();
     }
+  }
+
+  async function pollForResults() {
+    for (let i = 0; i < 120; i++) {
+      await sleep(5000);
+      try {
+        const res = await fetch(API_BASE + "/api/scan");
+        if (!res.ok) continue;
+        const data = await res.json();
+        // Show partial results as they come in
+        if (data.results && data.results.length > 0) {
+          allResults = data.results;
+          updateFilterCounts();
+          renderResults();
+          showStatusBar(data);
+        }
+        if (!data.isRefreshing && data.progress.phase === "done") {
+          stopProgressPoll();
+          return;
+        }
+      } catch(e) {
+        await sleep(5000);
+      }
+    }
+    stopProgressPoll();
   }
 
   function startProgressPoll() {
