@@ -9,11 +9,28 @@ import threading
 import concurrent.futures
 import time
 import logging
+import os
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
+
+# yfinance 0.2.55+ handles cookies automatically, but we set headers to help
+import yfinance.utils as yf_utils
+try:
+    import requests as req_session
+    _yf_session = req_session.Session()
+    _yf_session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+    })
+    yf.set_tz_cache_location("/tmp/yf_tz_cache")
+except Exception as e:
+    log.warning("Session setup: %s", e)
 
 CACHE_TTL  = 6 * 3600
 DAYS_AHEAD = 42
