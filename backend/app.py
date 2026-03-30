@@ -34,8 +34,8 @@ except Exception as e:
 
 CACHE_TTL  = 6 * 3600
 DAYS_AHEAD = 42
-MAX_TICKERS = 50
-MAX_WORKERS = 4
+MAX_TICKERS = 200
+MAX_WORKERS = 5
 
 _cache = {
     "results": [], "universe": [], "ts": 0,
