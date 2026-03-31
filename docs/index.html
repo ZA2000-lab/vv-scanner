@@ -290,6 +290,10 @@
   let activeTab = "scan";
   let expandedCards = new Set();
   let progressInterval = null;
+  let cspResults = [];
+  let cspFilter = "all";
+  let cspExpanded = new Set();
+  let cspProgInterval = null;
 
   window.addEventListener("DOMContentLoaded", () => { loadScan(); });
 
@@ -464,11 +468,7 @@
     }
   }
 
-  // ── Layer 2 state ────────────────────────────────────────────────────────
-  let cspResults    = [];
-  let cspFilter     = "all";
-  let cspExpanded   = new Set();
-  let cspProgInterval = null;
+  // ── Layer 2 functions ─────────────────────────────────────────────────────
 
   async function loadCSP() {
     document.getElementById("csp-loading").style.display = "";
