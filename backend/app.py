@@ -43,6 +43,21 @@ _cache = {
     "debug": {}
 }
 
+# Layer 2 cache — cash-secured puts
+_csp_cache = {
+    "results": [], "ts": 0,
+    "running": False, "progress": {"done":0,"total":0,"phase":"idle"},
+}
+
+# Layer 2 universe — quality large caps with liquid options
+CSP_UNIVERSE = [
+    "AAPL","MSFT","GOOGL","AMZN","META","V","MA","JPM","BAC","GS",
+    "JNJ","UNH","HD","COST","WMT","PG","KO","MCD","XOM","CVX",
+    "AMD","TSLA","NFLX","ORCL","CRM","ADBE","QCOM","INTC","TXN",
+    "MS","BLK","SCHW","LLY","ABBV","MRK","PFE","AMGN",
+    "SPY","QQQ","IWM","XLE","XLF","XLK","GLD","SMH",
+]
+
 NASDAQ_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     "Accept": "application/json, text/plain, */*",
@@ -273,6 +288,214 @@ def score_ticker(sym, earn_str, earn_days):
         return None
 
 
+def score_csp_ticker(sym, earnings_map):
+    """Score a ticker for a cash-secured put setup (Layer 2)."""
+    try:
+        stock   = yf.Ticker(sym)
+        today_d = date.today()
+
+        # Price history — need 1yr for RV range
+        h1y = stock.history(period="1y")
+        if h1y.empty or len(h1y) < 60:
+            return None
+        price = float(h1y["Close"].iloc[-1])
+        if price <= 0:
+            return None
+
+        # Volume check
+        avg_vol = float(h1y["Volume"].tail(30).mean())
+        if avg_vol < 500_000:
+            return None
+
+        # RV calculations
+        rv30 = yang_zhang(h1y, window=30)
+
+        # 52-week RV range (rolling) to estimate IV rank proxy
+        rv_series = h1y["Close"].pct_change().rolling(30).std() * (252**0.5)
+        rv_series = rv_series.dropna()
+        rv_min = float(rv_series.quantile(0.10))
+        rv_max = float(rv_series.quantile(0.90))
+
+        # Get options
+        opts = stock.options
+        if not opts or len(opts) < 1:
+            return None
+
+        # Find expiry 30-50 DTE
+        target_exp = None
+        target_dte = None
+        for exp in sorted(opts):
+            dte = (datetime.strptime(exp, "%Y-%m-%d").date() - today_d).days
+            if 28 <= dte <= 55:
+                target_exp = exp
+                target_dte = dte
+                break
+
+        if not target_exp:
+            # Fall back to closest beyond 28 days
+            for exp in sorted(opts):
+                dte = (datetime.strptime(exp, "%Y-%m-%d").date() - today_d).days
+                if dte >= 28:
+                    target_exp = exp
+                    target_dte = dte
+                    break
+
+        if not target_exp or target_dte is None:
+            return None
+
+        # Get put chain
+        ch = stock.option_chain(target_exp)
+        puts = ch.puts
+        if puts.empty:
+            return None
+
+        # ATM IV from puts
+        pi = (puts["strike"] - price).abs().idxmin()
+        atm_iv = float(puts.loc[pi, "impliedVolatility"])
+        if atm_iv <= 0:
+            return None
+
+        # IV rank proxy: where does current IV sit vs RV range
+        if rv_max > rv_min:
+            iv_rank = int(min(100, max(0, (atm_iv - rv_min) / (rv_max - rv_min) * 100)))
+        else:
+            iv_rank = 50
+
+        iv_rv_ratio = atm_iv / rv30 if rv30 > 0 else 1.0
+
+        # Find ~30-delta put strike
+        # 30-delta put ≈ strike where delta ~ -0.30
+        # Approximation: price * exp(-0.5 * sigma * sqrt(T)) for ~30 delta
+        sigma = atm_iv
+        T     = target_dte / 365.0
+        target_strike_raw = price * (1 - 0.45 * sigma * (T**0.5))
+
+        # Find closest actual strike below that target
+        otm_puts = puts[puts["strike"] <= price * 1.01].copy()
+        if otm_puts.empty:
+            return None
+        otm_puts["dist"] = (otm_puts["strike"] - target_strike_raw).abs()
+        best_row = otm_puts.loc[otm_puts["dist"].idxmin()]
+        put_strike = float(best_row["strike"])
+
+        bid  = float(best_row.get("bid",  0) or 0)
+        ask  = float(best_row.get("ask",  0) or 0)
+        oi   = int(best_row.get("openInterest", 0) or 0)
+        iv_p = float(best_row.get("impliedVolatility", atm_iv) or atm_iv)
+
+        if bid <= 0 or ask <= 0:
+            # Estimate premium via BS approximation
+            mid = round(price * iv_p * (T**0.5) * 0.40 * (put_strike/price)**0.5, 2)
+        else:
+            mid = round((bid + ask) / 2, 2)
+
+        if mid <= 0.05:
+            return None
+
+        spread_pct = round((ask - bid) / mid * 100, 1) if mid > 0 and ask > bid else 0
+
+        # Breakeven
+        breakeven = round(put_strike - mid, 2)
+
+        # Return on collateral
+        collateral = put_strike * 100  # 1 contract
+        roc_pct    = round(mid * 100 / collateral * 100, 2) if collateral > 0 else 0
+        roc_ann    = round(roc_pct * (365 / target_dte), 1) if target_dte > 0 else 0
+
+        # Earnings check — skip if earnings within expiry window
+        earn_within = sym in earnings_map and earnings_map[sym][1] <= target_dte
+        earn_str    = earnings_map[sym][0] if sym in earnings_map else None
+        earn_days   = earnings_map[sym][1] if sym in earnings_map else None
+
+        # Quality rating
+        if iv_rank < 45 or earn_within or spread_pct > 15:
+            quality = "SKIP"
+        elif iv_rank >= 60 and iv_rv_ratio >= 1.2 and not earn_within and spread_pct <= 8:
+            quality = "STRONG"
+        else:
+            quality = "DECENT"
+
+        try:    name = getattr(stock.fast_info, "company_name", None) or sym
+        except: name = sym
+
+        return {
+            "ticker":         sym,
+            "name":           name,
+            "price":          round(price, 2),
+            "quality":        quality,
+            "ivRank":         iv_rank,
+            "ivRvRatio":      round(iv_rv_ratio, 2),
+            "putStrike":      put_strike,
+            "expiration":     target_exp,
+            "dte":            target_dte,
+            "premium":        mid,
+            "bid":            round(bid, 2),
+            "ask":            round(ask, 2),
+            "spreadPct":      spread_pct,
+            "openInterest":   oi,
+            "breakeven":      breakeven,
+            "rocPct":         roc_pct,
+            "rocAnn":         roc_ann,
+            "collateral":     int(collateral),
+            "avgVol":         int(avg_vol),
+            "atm_iv":         round(atm_iv * 100, 1),
+            "rv30":           round(rv30 * 100, 1),
+            "earningsWithin": earn_within,
+            "earningsDate":   earn_str,
+            "earningsDays":   earn_days,
+            "profitTarget":   round(mid * 0.50 * 100, 2),
+            "stopLoss":       round(mid * 2.0 * 100, 2),
+        }
+    except Exception as e:
+        log.debug("CSP %s failed: %s", sym, e)
+        return None
+
+
+def run_csp_scan():
+    """Layer 2: scan CSP_UNIVERSE for cash-secured put setups."""
+    if _csp_cache["running"]:
+        return
+    _csp_cache["running"] = True
+    _csp_cache["progress"] = {"done": 0, "total": len(CSP_UNIVERSE), "phase": "scoring"}
+    log.info("CSP scan started (%d tickers)", len(CSP_UNIVERSE))
+
+    # Reuse earnings map from L1 cache if fresh, else fetch fresh
+    try:
+        earnings_map = fetch_earnings_calendar()
+    except Exception:
+        earnings_map = {}
+
+    results = []
+    lock = threading.Lock()
+
+    def score_one(sym):
+        r = score_csp_ticker(sym, earnings_map)
+        with lock:
+            _csp_cache["progress"]["done"] += 1
+            if r:
+                results.append(r)
+                _csp_cache["results"] = sorted(
+                    results,
+                    key=lambda x: ({"STRONG":0,"DECENT":1,"SKIP":2}.get(x["quality"],3),
+                                   -x["rocAnn"])
+                )
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futs = {pool.submit(score_one, sym): sym for sym in CSP_UNIVERSE}
+        for f in concurrent.futures.as_completed(futs):
+            try: f.result()
+            except: pass
+
+    _csp_cache["results"] = sorted(
+        results,
+        key=lambda x: ({"STRONG":0,"DECENT":1,"SKIP":2}.get(x["quality"],3), -x["rocAnn"])
+    )
+    _csp_cache["ts"] = time.time()
+    _csp_cache["running"] = False
+    _csp_cache["progress"] = {"done": len(CSP_UNIVERSE), "total": len(CSP_UNIVERSE), "phase": "done"}
+    log.info("CSP scan done. %d results.", len(results))
+
+
 def run_scan():
     if _cache["running"]:
         return
@@ -376,6 +599,40 @@ def api_refresh():
         return jsonify({"message":"Scan in progress"}), 202
     threading.Thread(target=run_scan, daemon=True).start()
     return jsonify({"message":"Refresh started"}), 202
+
+
+# ── Layer 2: Cash-Secured Put endpoints ────────────────────────────────────
+
+@app.route("/api/csp/scan")
+def api_csp_scan():
+    if not _csp_cache["ts"] or time.time() - _csp_cache["ts"] > CACHE_TTL:
+        if not _csp_cache["running"]:
+            threading.Thread(target=run_csp_scan, daemon=True).start()
+    return jsonify({
+        "results":      _csp_cache["results"],
+        "count":        len(_csp_cache["results"]),
+        "scannedAt":    datetime.fromtimestamp(_csp_cache["ts"]).strftime("%b %d %Y, %I:%M %p") if _csp_cache["ts"] else None,
+        "ageMinutes":   int((time.time() - _csp_cache["ts"]) / 60) if _csp_cache["ts"] else 0,
+        "isRefreshing": _csp_cache["running"],
+        "universe":     len(CSP_UNIVERSE),
+        "progress":     _csp_cache["progress"],
+    })
+
+
+@app.route("/api/csp/progress")
+def api_csp_progress():
+    p = _csp_cache["progress"]
+    pct = int(p["done"] / p["total"] * 100) if p["total"] > 0 else 0
+    return jsonify({"done": p["done"], "total": p["total"], "pct": pct,
+                    "phase": p["phase"], "running": _csp_cache["running"]})
+
+
+@app.route("/api/csp/refresh", methods=["POST"])
+def api_csp_refresh():
+    if _csp_cache["running"]:
+        return jsonify({"message": "CSP scan in progress"}), 202
+    threading.Thread(target=run_csp_scan, daemon=True).start()
+    return jsonify({"message": "CSP refresh started"}), 202
 
 
 @app.route("/api/debug")
