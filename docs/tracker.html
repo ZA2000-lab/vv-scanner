@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="theme-color" content="#05070b"/>
+  <title>Portfolio Tracker</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:#05070b; --surface:#090c12; --card:#0d1118; --border:#141c28; --hi:#1a2438;
+      --green:#00e87a; --blue:#38b6ff; --yellow:#f5c842; --red:#ff4455;
+      --orange:#ff8c42; --purple:#a78bfa;
+      --dim:#253040; --muted:#4a6070; --text:#a8c0d0; --bright:#dce8f0;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+    body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code','Courier New',monospace; min-height:100vh; }
+    button { cursor:pointer; font-family:inherit; border:none; transition:opacity .15s,transform .1s; }
+    button:active { transform:scale(.97); opacity:.8; }
+    input,select,textarea { outline:none; font-family:inherit; }
+    input:focus,select:focus,textarea:focus { border-color:var(--blue) !important; }
+    ::-webkit-scrollbar { width:3px; }
+    ::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+    @keyframes spin   { to { transform:rotate(360deg); } }
+    @keyframes fadeUp { from { opacity:0;transform:translateY(6px); } to { opacity:1;transform:translateY(0); } }
+    @keyframes pulse  { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+
+    #app { max-width:540px; margin:0 auto; display:flex; flex-direction:column; min-height:100vh; }
+
+    /* Header */
+    #header {
+      background:#090c12ee; backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+      border-bottom:1px solid var(--border);
+      padding:calc(env(safe-area-inset-top)+12px) 16px 10px;
+      position:sticky; top:0; z-index:100;
+    }
+    .hrow { display:flex; align-items:center; justify-content:space-between; }
+    .logo-badge { width:30px;height:30px;background:linear-gradient(135deg,var(--yellow),var(--green));border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;color:#000;flex-shrink:0; }
+    .logo-title { font-size:14px;font-weight:700;color:var(--bright); }
+    .logo-sub   { font-size:9px;color:var(--muted);letter-spacing:.08em;margin-top:1px; }
+    #add-btn { background:var(--green);border-radius:8px;color:#000;font-size:12px;font-weight:800;padding:7px 14px; }
+    #refresh-btn { background:var(--card);border:1px solid var(--border);border-radius:7px;color:var(--blue);font-size:11px;padding:5px 10px;display:flex;align-items:center;gap:5px; }
+    .spin { display:inline-block;animation:spin .8s linear infinite; }
+
+    /* Nav */
+    #nav { background:var(--surface);border-top:1px solid var(--border);display:flex;position:sticky;bottom:0;z-index:100;padding-bottom:env(safe-area-inset-bottom); }
+    .nav-btn { flex:1;padding:10px 0;background:none;border:none;border-top:2px solid transparent;color:var(--muted);font-size:10px;letter-spacing:.06em;font-weight:400;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s,border-color .15s; }
+    .nav-btn.active { color:var(--green);border-top-color:var(--green);font-weight:700; }
+    .nav-icon { font-size:17px; }
+
+    /* Content */
+    #content { flex:1;overflow-y:auto;padding:14px 14px 20px; }
+
+    /* Cards */
+    .card { background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px; }
+    .card-title { font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-weight:700;margin-bottom:8px; }
+    .stat-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px; }
+    .stat-card { background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px; }
+    .stat-label { font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px; }
+    .stat-value { font-size:18px;font-weight:800;color:var(--bright);line-height:1; }
+    .stat-value.big { font-size:22px; }
+    .stat-sub { font-size:10px;color:var(--muted);margin-top:4px; }
+
+    /* Row */
+    .row { display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border); }
+    .row:last-child { border-bottom:none; }
+    .row-label { color:var(--muted); }
+    .row-val { color:var(--bright);font-weight:600; }
+
+    /* Holding card */
+    .holding { background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;animation:fadeUp .3s ease; }
+    .holding-top { display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px; }
+    .ticker-sym { font-size:16px;font-weight:900;color:var(--bright); }
+    .ticker-sub { font-size:11px;color:var(--muted);margin-top:2px; }
+    .bar-wrap { display:flex;align-items:center;gap:8px; }
+    .bar-track { flex:1;background:var(--border);border-radius:3px;height:4px;overflow:hidden; }
+    .bar-fill  { height:100%;border-radius:3px;transition:width .5s ease; }
+
+    /* Form */
+    #form-panel { display:none;padding:14px;animation:fadeUp .2s ease; }
+    .form-grid { display:grid;grid-template-columns:1fr 1fr;gap:10px; }
+    .field { display:flex;flex-direction:column;gap:5px; }
+    .field.full { grid-column:span 2; }
+    .field label { font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-weight:700; }
+    .inp { background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--bright);font-size:13px;padding:9px 12px;width:100%;transition:border-color .15s; }
+    .inp-sel { appearance:none; }
+    .type-row { display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;margin-bottom:14px; }
+    .type-btn { flex-shrink:0;padding:7px 12px;border-radius:20px;font-size:11px;color:var(--muted);background:transparent;border:1px solid var(--border);font-weight:400;transition:all .15s; }
+    .type-btn.active { color:var(--bright);background:var(--border);border-color:var(--dim);font-weight:700; }
+    .pnl-preview { background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:14px;font-weight:700; }
+
+    /* Transaction row */
+    .tx-row { background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 14px;margin-bottom:7px;cursor:pointer;transition:border-color .15s;animation:fadeUp .3s ease; }
+    .tx-row:hover { border-color:var(--hi); }
+    .tx-detail { border-top:1px solid var(--border);margin-top:10px;padding-top:10px;animation:fadeUp .15s ease; }
+
+    /* Tabs in form */
+    .form-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:14px; }
+    .back-btn { background:none;border:none;color:var(--muted);font-size:12px;padding:0; }
+    .save-btn { background:var(--green);border-radius:7px;color:#000;font-size:12px;font-weight:800;padding:7px 16px; }
+
+    /* Chart */
+    .chart-wrap { background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 8px 8px;margin-bottom:12px; }
+    .filter-row { display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px; }
+    .filter-btn { padding:5px 12px;border-radius:20px;font-size:11px;color:var(--muted);background:transparent;border:1px solid var(--border);font-weight:400; }
+    .filter-btn.active { color:var(--bright);background:var(--border);border-color:var(--dim);font-weight:700; }
+
+    /* Export */
+    .export-wrap { background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px; }
+    .export-btns { display:flex;gap:8px;margin-top:10px; }
+    .export-btn { flex:1;border-radius:7px;font-size:12px;font-weight:700;padding:9px 0; }
+
+    /* Import */
+    .import-area { width:100%;min-height:80px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:10px;resize:vertical;line-height:1.5; }
+
+    /* Alert */
+    .alert { border-radius:8px;padding:10px 12px;font-size:11px;line-height:1.6;margin-bottom:10px; }
+    .alert-warn { background:#1a1000;border:1px solid var(--yellow)44;border-left:3px solid var(--yellow);color:var(--text); }
+    .alert-red  { background:#1a0208;border:1px solid var(--red)44;border-left:3px solid var(--red);color:var(--text); }
+    .alert-green{ background:#001a0d;border:1px solid var(--green)22;border-left:3px solid var(--green);color:var(--text); }
+
+    /* Empty */
+    .empty { text-align:center;padding:48px 20px;color:var(--muted); }
+    .empty-icon { font-size:36px;margin-bottom:12px;opacity:.3; }
+
+    /* Pill badge */
+    .pill { display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <div class="hrow" style="margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="logo-badge">PF</div>
+        <div>
+          <div class="logo-title">Portfolio Tracker</div>
+          <div class="logo-sub">STOCKS · CSPS · LIVE PRICES · S&amp;P</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:7px;align-items:center">
+        <button id="refresh-btn" onclick="refreshPrices(true)">
+          <span id="refresh-icon">↻</span>
+          <span id="refresh-label">Prices</span>
+        </button>
+        <button id="add-btn" onclick="showForm('buy')">+ Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="content"></div>
+
+  <div id="form-panel">
+    <div class="form-header">
+      <button class="back-btn" onclick="closeForm()">← Cancel</button>
+      <div style="font-size:14px;font-weight:700;color:var(--bright)" id="form-title">Add Transaction</div>
+      <button class="save-btn" onclick="saveTx()">Save</button>
+    </div>
+    <div class="type-row" id="type-row"></div>
+    <div class="form-grid" id="form-fields"></div>
+    <div id="pnl-preview" style="display:none;margin-top:10px"></div>
+  </div>
+
+  <div id="nav">
+    <button class="nav-btn active" id="nav-dashboard" onclick="setTab('dashboard')">
+      <span class="nav-icon">◈</span>Portfolio
+    </button>
+    <button class="nav-btn" id="nav-chart" onclick="setTab('chart')">
+      <span class="nav-icon">↗</span>Chart
+    </button>
+    <button class="nav-btn" id="nav-history" onclick="setTab('history')">
+      <span class="nav-icon">≡</span>History
+    </button>
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const API = "https://vv-scanner-production.up.railway.app";
+const PRICE_TTL = 15 * 60 * 1000;
+const LS = {
+  get: k => { try { const v=localStorage.getItem(k); return v?JSON.parse(v):null; } catch{return null;} },
+  set: (k,v) => { try { localStorage.setItem(k,JSON.stringify(v)); } catch(e){console.error(e);} },
+};
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let state = {
+  transactions: [],
+  snapshots: [],
+  prices: {},
+  priceTs: 0,
+  cash: 0,
+  startCash: null,
+  activeTab: "dashboard",
+  expandedTx: null,
+  chartMode: "both",
+  histFilter: "all",
+};
+let activeForm = null;
+let chartInstance = null;
+
+// ── Load/Save ─────────────────────────────────────────────────────────────────
+function loadState() {
+  state.transactions = LS.get("pt_transactions") || [];
+  state.snapshots    = LS.get("pt_snapshots")    || [];
+  const px           = LS.get("pt_prices");
+  if (px) { state.prices = px.data||{}; state.priceTs = px.ts||0; }
+  const c = LS.get("pt_cash");
+  if (c !== null) state.cash = c;
+  state.startCash = LS.get("pt_startcash");
+}
+function save() {
+  LS.set("pt_transactions", state.transactions);
+  LS.set("pt_snapshots",    state.snapshots);
+  LS.set("pt_cash",         state.cash);
+  if (state.startCash !== null) LS.set("pt_startcash", state.startCash);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const uid     = () => Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+const today   = () => new Date().toISOString().slice(0,10);
+const nowTs   = () => Date.now();
+const fmtDate = d => d ? new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) : "—";
+const fmtShort= d => d ? new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "";
+const dollar  = n => { const a=Math.abs(n); const s=a>=1000?"$"+(a/1000).toFixed(1)+"k":"$"+a.toFixed(2); return n<0?"-"+s:s; };
+const signed  = n => (n>=0?"+":"")+dollar(n);
+const pctStr  = n => (n>=0?"+":"")+n.toFixed(2)+"%";
+const clr     = n => n>=0?"var(--green)":"var(--red)";
+const daysLeft= exp => exp ? Math.ceil((new Date(exp+"T12:00:00")-new Date())/86400000) : null;
+
+// ── Holdings calculation ──────────────────────────────────────────────────────
+function calcHoldings() {
+  const lots = {}, realized = {};
+  const sorted = [...state.transactions].sort((a,b)=>new Date(a.date)-new Date(b.date));
+
+  sorted.forEach(tx => {
+    if (tx.type==="buy"||tx.type==="csp_assigned") {
+      const qty=Number(tx.quantity)||0, cost=Number(tx.price)||0;
+      if (!lots[tx.ticker]) lots[tx.ticker]=[];
+      lots[tx.ticker].push({qty,cost});
+    }
+    if (tx.type==="sell") {
+      const qty=Number(tx.quantity)||0, price=Number(tx.price)||0;
+      if (!lots[tx.ticker]) return;
+      let rem=qty, basis=0;
+      while(rem>0&&lots[tx.ticker].length>0) {
+        const lot=lots[tx.ticker][0], used=Math.min(rem,lot.qty);
+        basis+=used*lot.cost; lot.qty-=used; rem-=used;
+        if(lot.qty===0) lots[tx.ticker].shift();
+      }
+      const pnl=(price-basis/qty)*qty-(Number(tx.fees)||0);
+      realized[tx.ticker]=(realized[tx.ticker]||0)+pnl;
+    }
+  });
+
+  const holdings={};
+  Object.entries(lots).forEach(([t,ls])=>{
+    const qty=ls.reduce((s,l)=>s+l.qty,0), cost=ls.reduce((s,l)=>s+l.qty*l.cost,0);
+    if(qty>0) holdings[t]={ticker:t,quantity:qty,avgCost:cost/qty,totalCost:cost};
+  });
+  return {holdings, realized};
+}
+
+function calcOptionPnL() {
+  let total=0;
+  const opens={};
+  state.transactions.filter(t=>t.type==="csp_open").forEach(t=>{opens[t.id]=t;});
+  state.transactions.filter(t=>t.type==="csp_close"&&t.linkedId).forEach(t=>{
+    const o=opens[t.linkedId]; if(!o) return;
+    total+=(Number(o.premium)||0)*(Number(o.contracts)||1)*100
+          -(Number(t.premium)||0)*(Number(t.contracts)||1)*100
+          -(Number(t.fees)||0);
+  });
+  return total;
+}
+
+function getEnrichedHoldings() {
+  const {holdings,realized} = calcHoldings();
+  return Object.values(holdings).map(h => {
+    const px=state.prices[h.ticker]||h.avgCost;
+    const mkt=px*h.quantity, unr=(px-h.avgCost)*h.quantity;
+    return {...h,currentPrice:px,hasLive:!!state.prices[h.ticker],marketValue:mkt,unrealized:unr,unrealizedPct:h.avgCost>0?(px-h.avgCost)/h.avgCost*100:0,realizedPnL:realized[h.ticker]||0};
+  });
+}
+
+// ── Live price fetch ──────────────────────────────────────────────────────────
+async function refreshPrices(force=false) {
+  if (!force && nowTs()-state.priceTs < PRICE_TTL) return;
+  const {holdings} = calcHoldings();
+  const tickers = [...new Set([...Object.keys(holdings),"SPY"])];
+  if (!tickers.length) return;
+
+  const icon  = document.getElementById("refresh-icon");
+  const label = document.getElementById("refresh-label");
+  icon.classList.add("spin"); label.textContent="Loading...";
+
+  try {
+    const res  = await fetch(`${API}/api/prices?tickers=${tickers.join(",")}`);
+    const data = await res.json();
+    if (data.prices && Object.keys(data.prices).length > 0) {
+      state.prices  = data.prices;
+      state.priceTs = nowTs();
+      LS.set("pt_prices", {data:data.prices, ts:nowTs()});
+
+      // Save snapshot
+      const eh  = getEnrichedHoldings();
+      const mkt = eh.reduce((s,h)=>s+h.marketValue,0);
+      const snap = {date:today(), portfolioValue:mkt+state.cash, spyPrice:data.prices["SPY"], timestamp:nowTs()};
+      state.snapshots = [...state.snapshots.filter(s=>s.date!==today()), snap]
+        .sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(-365);
+      LS.set("pt_snapshots", state.snapshots);
+      render();
+    }
+  } catch(e) {
+    console.warn("Price fetch failed:", e);
+  } finally {
+    icon.classList.remove("spin"); label.textContent="Prices";
+  }
+}
+
+// ── Tab rendering ─────────────────────────────────────────────────────────────
+function setTab(tab) {
+  state.activeTab=tab;
+  document.querySelectorAll(".nav-btn").forEach(b=>b.classList.remove("active"));
+  document.getElementById("nav-"+tab)?.classList.add("active");
+  closeForm();
+  render();
+}
+
+function render() {
+  const c=document.getElementById("content");
+  if (state.activeTab==="dashboard") { c.style.display=""; renderDashboard(c); }
+  else if (state.activeTab==="chart")   { c.style.display=""; renderChart(c); }
+  else if (state.activeTab==="history") { c.style.display=""; renderHistory(c); }
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────────
+function renderDashboard(c) {
+  const eh        = getEnrichedHoldings();
+  const optPnL    = calcOptionPnL();
+  const {realized}= calcHoldings();
+  const totReal   = Object.values(realized).reduce((s,v)=>s+v,0)+optPnL;
+  const totUnreal = eh.reduce((s,h)=>s+h.unrealized,0);
+  const totMkt    = eh.reduce((s,h)=>s+h.marketValue,0);
+  const portVal   = totMkt+state.cash;
+  const totPnL    = totUnreal+totReal;
+
+  const firstSnap  = state.snapshots[0];
+  const spyStart   = firstSnap?.spyPrice;
+  const spyCurr    = state.prices["SPY"];
+  const portStart  = firstSnap?.portfolioValue||portVal;
+  const portPct    = portStart>0?(portVal-portStart)/portStart*100:0;
+  const spyPct     = spyStart&&spyCurr?(spyCurr-spyStart)/spyStart*100:null;
+  const alpha      = spyPct!==null?portPct-spyPct:null;
+
+  const minsAgo = state.priceTs ? Math.round((nowTs()-state.priceTs)/60000) : null;
+
+  // Open CSPs
+  const closedCspIds = new Set(state.transactions.filter(t=>t.type==="csp_close"&&t.linkedId).map(t=>t.linkedId));
+  const openCsps = state.transactions.filter(t=>t.type==="csp_open"&&!closedCspIds.has(t.id));
+
+  c.innerHTML = `
+    <div style="animation:fadeUp .2s ease">
+      ${state.startCash===null ? `
+        <div class="alert alert-warn" style="margin-bottom:14px">
+          <strong style="color:var(--yellow)">Set starting cash balance</strong><br>
+          Enter your current cash to track total portfolio value.
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <input class="inp" id="startcash-inp" type="number" placeholder="e.g. 10000" style="flex:1">
+            <button onclick="setStartCash()" style="background:var(--yellow);border-radius:6px;color:#000;font-weight:800;padding:0 14px;font-size:12px">Set</button>
+          </div>
+        </div>
+      ` : ""}
+
+      <div class="stat-grid">
+        <div class="stat-card" style="grid-column:span 1">
+          <div class="stat-label">Portfolio Value</div>
+          <div class="stat-value big" style="color:var(--bright)">${dollar(portVal)}</div>
+          <div class="stat-sub">Holdings + Cash</div>
+        </div>
+        <div class="stat-card" style="grid-column:span 1">
+          <div class="stat-label">Total P&amp;L</div>
+          <div class="stat-value big" style="color:${clr(totPnL)}">${signed(totPnL)}</div>
+          <div class="stat-sub">Unrealized + Realized</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Unrealized P&amp;L</div>
+          <div class="stat-value" style="color:${clr(totUnreal)}">${signed(totUnreal)}</div>
+          <div class="stat-sub">${dollar(totMkt)} market value</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Realized P&amp;L</div>
+          <div class="stat-value" style="color:${clr(totReal)}">${signed(totReal)}</div>
+          <div class="stat-sub">Stocks + Options</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Cash</div>
+          <div class="stat-value" style="color:var(--blue)">${dollar(state.cash)}</div>
+          <div class="stat-sub">Available</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Positions</div>
+          <div class="stat-value" style="color:var(--muted)">${eh.length}</div>
+          <div class="stat-sub">${openCsps.length} open CSPs</div>
+        </div>
+      </div>
+
+      ${spyPct!==null ? `
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">vs S&P 500 (since first snapshot)</div>
+          <div style="display:flex;gap:16px">
+            <div>
+              <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Your Portfolio</div>
+              <div style="font-size:20px;font-weight:800;color:${clr(portPct)}">${pctStr(portPct)}</div>
+            </div>
+            <div style="width:1px;background:var(--border)"></div>
+            <div>
+              <div style="font-size:10px;color:var(--muted);margin-bottom:3px">S&P 500</div>
+              <div style="font-size:20px;font-weight:800;color:${spyPct>=0?"var(--blue)":"var(--red)"}">${pctStr(spyPct)}</div>
+            </div>
+            <div style="width:1px;background:var(--border)"></div>
+            <div>
+              <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Alpha</div>
+              <div style="font-size:20px;font-weight:800;color:${clr(alpha)}">${pctStr(alpha)}</div>
+            </div>
+          </div>
+        </div>
+      ` : ""}
+
+      ${eh.length > 0 ? `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-weight:700">Holdings</div>
+          <div style="font-size:10px;color:var(--dim)">${minsAgo!==null?minsAgo+"min ago":""}</div>
+        </div>
+        ${eh.map(h=>`
+          <div class="holding">
+            <div class="holding-top">
+              <div>
+                <div class="ticker-sym">${h.ticker}</div>
+                <div class="ticker-sub">${h.quantity} shares · avg $${h.avgCost.toFixed(2)}</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:15px;font-weight:700;color:var(--bright)">${dollar(h.marketValue)}</div>
+                <div style="font-size:11px;color:${h.hasLive?"var(--blue)":"var(--dim)"}">$${h.currentPrice.toFixed(2)} ${h.hasLive?"●":"(est.)"}</div>
+              </div>
+            </div>
+            <div class="bar-wrap">
+              <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100,Math.abs(h.unrealizedPct))}%;background:${clr(h.unrealized)}"></div></div>
+              <div style="font-size:11px;font-weight:700;color:${clr(h.unrealized)};flex-shrink:0">${signed(h.unrealized)} (${pctStr(h.unrealizedPct)})</div>
+            </div>
+          </div>
+        `).join("")}
+      ` : ""}
+
+      ${openCsps.length > 0 ? `
+        <div style="font-size:10px;color:var(--purple);letter-spacing:.1em;text-transform:uppercase;font-weight:700;margin-top:14px;margin-bottom:8px">Open CSPs</div>
+        ${openCsps.map(t=>{
+          const dl=daysLeft(t.expiration);
+          const credit=(Number(t.premium)||0)*(Number(t.contracts)||1)*100;
+          return `<div class="holding" style="border-color:var(--purple)33">
+            <div class="holding-top">
+              <div>
+                <div class="ticker-sym">${t.ticker} $${t.strike} Put</div>
+                <div class="ticker-sub">Exp: ${fmtDate(t.expiration)}${dl!==null?` (${dl}d)`:""}${dl!==null&&dl<=21?" ⚠ expiring soon":""}</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:14px;font-weight:700;color:var(--yellow)">${dollar(credit)} credit</div>
+                <div style="font-size:10px;color:var(--green)">Target: +${dollar(credit*0.5)}</div>
+              </div>
+            </div>
+          </div>`;
+        }).join("")}
+      ` : ""}
+
+      ${state.transactions.length===0&&state.startCash!==null?`
+        <div class="empty">
+          <div class="empty-icon">◈</div>
+          <div style="font-size:13px;margin-bottom:6px">No transactions yet</div>
+          <div style="font-size:11px;color:var(--dim);margin-bottom:18px">Tap + Add to log your first trade or deposit</div>
+          <button onclick="showForm('deposit')" style="background:var(--green);border-radius:8px;color:#000;padding:10px 20px;font-size:12px;font-weight:800">+ Add Deposit</button>
+        </div>
+      `:""} 
+    </div>
+  `;
+}
+
+function setStartCash() {
+  const v = Number(document.getElementById("startcash-inp")?.value);
+  if (v >= 0) { state.cash = v; state.startCash = v; save(); render(); }
+}
+
+// ── CHART ─────────────────────────────────────────────────────────────────────
+function renderChart(c) {
+  const snaps = state.snapshots;
+  const firstSnap = snaps[0];
+  const portStart = firstSnap?.portfolioValue;
+  const spyStart  = firstSnap?.spyPrice;
+
+  if (snaps.length < 2) {
+    c.innerHTML = `<div class="empty"><div class="empty-icon">📈</div><div style="font-size:13px;margin-bottom:6px">Not enough data yet</div><div style="font-size:11px;color:var(--dim);line-height:1.7">Refresh prices at least twice on different days to start your chart. Each refresh saves a daily snapshot.</div></div>`;
+    return;
+  }
+
+  const portPct  = portStart>0?(snaps[snaps.length-1].portfolioValue-portStart)/portStart*100:0;
+  const spyPct   = spyStart&&snaps[snaps.length-1].spyPrice?(snaps[snaps.length-1].spyPrice-spyStart)/spyStart*100:null;
+  const alpha    = spyPct!==null?portPct-spyPct:null;
+
+  const labels   = snaps.map(s=>fmtShort(s.date));
+  const portData = snaps.map(s=>portStart>0?+((s.portfolioValue-portStart)/portStart*100).toFixed(2):0);
+  const spyData  = snaps.map(s=>spyStart&&s.spyPrice?+((s.spyPrice-spyStart)/spyStart*100).toFixed(2):null);
+
+  c.innerHTML = `
+    <div style="animation:fadeUp .2s ease">
+      ${spyPct!==null?`
+        <div class="stat-grid" style="margin-bottom:12px">
+          <div class="stat-card"><div class="stat-label">Your Return</div><div class="stat-value" style="color:${clr(portPct)}">${pctStr(portPct)}</div></div>
+          <div class="stat-card"><div class="stat-label">S&P 500</div><div class="stat-value" style="color:${spyPct>=0?"var(--blue)":"var(--red)"}">${pctStr(spyPct)}</div></div>
+          <div class="stat-card"><div class="stat-label">Alpha</div><div class="stat-value" style="color:${clr(alpha)}">${pctStr(alpha)}</div></div>
+          <div class="stat-card"><div class="stat-label">Since</div><div class="stat-value" style="font-size:12px">${fmtShort(snaps[0].date)}</div><div class="stat-sub">${snaps.length} snapshots</div></div>
+        </div>
+      `:""}
+      <div class="filter-row">
+        <button class="filter-btn ${state.chartMode==="both"?"active":""}" onclick="setChartMode('both')">Portfolio + S&P</button>
+        <button class="filter-btn ${state.chartMode==="port"?"active":""}" onclick="setChartMode('port')">Portfolio Only</button>
+        <button class="filter-btn ${state.chartMode==="spy"?"active":""}" onclick="setChartMode('spy')">S&P Only</button>
+      </div>
+      <div class="chart-wrap">
+        <div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:8px">% Return Since ${fmtDate(snaps[0]?.date)}</div>
+        <canvas id="perf-chart" height="240"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title">Snapshot History</div>
+        <div style="max-height:220px;overflow-y:auto">
+          <div style="display:grid;grid-template-columns:80px 1fr 70px 70px;gap:8px;font-size:9px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;padding:4px 0;margin-bottom:4px">
+            <span>Date</span><span>Value</span><span>Your %</span><span>S&P %</span>
+          </div>
+          ${[...snaps].reverse().map(s=>{
+            const pp=portStart>0?((s.portfolioValue-portStart)/portStart*100):0;
+            const sp=spyStart&&s.spyPrice?((s.spyPrice-spyStart)/spyStart*100):null;
+            return `<div style="display:grid;grid-template-columns:80px 1fr 70px 70px;gap:8px;font-size:11px;padding:5px 0;border-bottom:1px solid var(--border)">
+              <span style="color:var(--muted)">${fmtShort(s.date)}</span>
+              <span style="color:var(--bright)">${dollar(s.portfolioValue)}</span>
+              <span style="color:${clr(pp)};font-weight:700">${pctStr(pp)}</span>
+              <span style="color:${sp!==null?(sp>=0?"var(--blue)":"var(--red)"):"var(--dim)"}">${sp!==null?pctStr(sp):"—"}</span>
+            </div>`;
+          }).join("")}
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Draw chart
+  requestAnimationFrame(()=>{
+    const canvas = document.getElementById("perf-chart");
+    if (!canvas) return;
+    if (chartInstance) { chartInstance.destroy(); chartInstance=null; }
+    const datasets = [];
+    if (state.chartMode!=="spy") datasets.push({label:"Portfolio",data:portData,borderColor:"#00e87a",backgroundColor:"#00e87a11",borderWidth:2,pointRadius:snaps.length>20?0:3,tension:.3,fill:true});
+    if (state.chartMode!=="port"&&spyData.some(v=>v!==null)) datasets.push({label:"S&P 500",data:spyData,borderColor:"#38b6ff",backgroundColor:"transparent",borderWidth:1.5,pointRadius:0,tension:.3,borderDash:[5,3]});
+    chartInstance = new Chart(canvas, {
+      type:"line",
+      data:{labels,datasets},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:"#4a6070",font:{size:11}}},tooltip:{backgroundColor:"#0d1118",borderColor:"#1a2438",borderWidth:1,callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(2)}%`}}},
+        scales:{
+          x:{grid:{color:"#141c28"},ticks:{color:"#253040",font:{size:9},maxTicksLimit:6}},
+          y:{grid:{color:"#141c28"},ticks:{color:"#253040",font:{size:9},callback:v=>v+"%"},zero:true},
+        },
+      }
+    });
+  });
+}
+
+function setChartMode(m) { state.chartMode=m; render(); }
+
+// ── HISTORY ───────────────────────────────────────────────────────────────────
+function renderHistory(c) {
+  const TYPE_META = {
+    buy:{label:"Buy",color:"var(--green)",icon:"▲"}, sell:{label:"Sell",color:"var(--red)",icon:"▼"},
+    csp_open:{label:"CSP Open",color:"var(--yellow)",icon:"◈"}, csp_close:{label:"CSP Close",color:"var(--yellow)",icon:"◎"},
+    csp_assigned:{label:"Assigned",color:"var(--purple)",icon:"→"},
+    deposit:{label:"Deposit",color:"var(--blue)",icon:"+"}, withdraw:{label:"Withdraw",color:"var(--orange)",icon:"−"},
+    dividend:{label:"Dividend",color:"var(--green)",icon:"$"},
+  };
+  const filters = [["all","All"],["buy","Buys"],["sell","Sells"],["csp_open","CSPs"],["deposit","Cash"]];
+  const sorted = [...state.transactions].sort((a,b)=>new Date(b.date)-new Date(a.date))
+    .filter(t=>state.histFilter==="all"||t.type===state.histFilter||(state.histFilter==="deposit"&&(t.type==="deposit"||t.type==="withdraw"||t.type==="dividend")));
+
+  const csvBtn=`onclick="exportCSV()"`;
+  const jsonBtn=`onclick="exportJSON()"`;
+  const importBtn=`onclick="document.getElementById('import-section').style.display=document.getElementById('import-section').style.display==='none'?'':'none'"`;
+
+  c.innerHTML=`
+    <div style="animation:fadeUp .2s ease">
+      <div class="export-wrap">
+        <div class="card-title">Backup &amp; Export</div>
+        <div style="font-size:11px;color:var(--text);margin-bottom:10px;line-height:1.6">Download your data. Do this monthly so it's safe on your phone even if this page is ever cleared.</div>
+        <div class="export-btns">
+          <button class="export-btn" style="background:var(--green)18;border:1px solid var(--green)44;color:var(--green)" ${csvBtn}>↓ CSV</button>
+          <button class="export-btn" style="background:var(--blue)18;border:1px solid var(--blue)44;color:var(--blue)" ${jsonBtn}>↓ JSON Backup</button>
+          <button class="export-btn" style="background:var(--purple)18;border:1px solid var(--purple)44;color:var(--purple)" ${importBtn}>↑ Import</button>
+        </div>
+        <div id="import-section" style="display:none;margin-top:12px">
+          <div style="font-size:11px;color:var(--text);margin-bottom:8px">Paste your JSON backup below to restore data:</div>
+          <textarea class="import-area" id="import-json" placeholder='Paste JSON backup here...'></textarea>
+          <button onclick="importJSON()" style="background:var(--purple);border-radius:6px;color:#000;font-weight:800;padding:8px 16px;font-size:12px;margin-top:8px;width:100%">Restore from Backup</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">
+          <div style="font-size:18px;font-weight:800;color:var(--bright)">${state.transactions.length}</div>
+          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Total Txs</div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">
+          <div style="font-size:18px;font-weight:800;color:var(--green)">${state.transactions.filter(t=>t.type==="buy").length}</div>
+          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Buys</div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">
+          <div style="font-size:18px;font-weight:800;color:var(--yellow)">${state.transactions.filter(t=>t.type==="csp_open").length}</div>
+          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">CSPs</div>
+        </div>
+      </div>
+
+      <div class="filter-row">
+        ${filters.map(([id,lbl])=>`<button class="filter-btn ${state.histFilter===id?"active":""}" onclick="setHistFilter('${id}')">${lbl}</button>`).join("")}
+      </div>
+
+      ${sorted.length===0?`<div class="empty"><div class="empty-icon">≡</div><div>No transactions yet</div></div>`:""}
+      ${sorted.map(tx=>{
+        const meta=TYPE_META[tx.type]||{label:tx.type,color:"var(--muted)",icon:"·"};
+        const amt=tx.type==="buy"||tx.type==="sell"?(Number(tx.quantity)||0)*(Number(tx.price)||0)
+          :tx.type==="csp_open"||tx.type==="csp_close"?(Number(tx.premium)||0)*(Number(tx.contracts)||1)*100
+          :Number(tx.amount)||0;
+        const expanded=state.expandedTx===tx.id;
+        return `<div class="tx-row" onclick="toggleTx('${tx.id}')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div style="display:flex;gap:10px;align-items:center">
+              <span style="font-size:16px;color:${meta.color}">${meta.icon}</span>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--bright)">
+                  <span style="color:${meta.color};margin-right:6px">${meta.label}</span>
+                  ${tx.ticker||""}${tx.type==="csp_open"||tx.type==="csp_close"?" $"+tx.strike+" Put":""}
+                </div>
+                <div style="font-size:10px;color:var(--muted)">${fmtDate(tx.date)}</div>
+              </div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:13px;font-weight:700;color:${meta.color}">${dollar(amt)}</div>
+              ${tx.quantity?`<div style="font-size:10px;color:var(--muted)">${tx.quantity} @ $${Number(tx.price||0).toFixed(2)}</div>`:""}
+            </div>
+          </div>
+          ${expanded?`<div class="tx-detail">
+            ${tx.notes?`<div style="font-size:11px;color:var(--text);margin-bottom:8px">${tx.notes}</div>`:""}
+            ${tx.fees?`<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Fees: $${Number(tx.fees).toFixed(2)}</div>`:""}
+            <button onclick="event.stopPropagation();deleteTx('${tx.id}')" style="background:#1a020811;border:1px solid var(--red)44;border-radius:6px;color:var(--red);font-size:11px;padding:5px 12px">Delete</button>
+          </div>`:""}
+        </div>`;
+      }).join("")}
+    </div>
+  `;
+}
+
+function setHistFilter(f) { state.histFilter=f; render(); }
+function toggleTx(id) { state.expandedTx=state.expandedTx===id?null:id; render(); }
+function deleteTx(id) { if(confirm("Delete this transaction?")) { state.transactions=state.transactions.filter(t=>t.id!==id); save(); render(); } }
+
+// ── ADD FORM ──────────────────────────────────────────────────────────────────
+const TX_TYPES = [
+  {id:"buy",label:"Buy Stock"},{id:"sell",label:"Sell Stock"},
+  {id:"csp_open",label:"Open CSP"},{id:"csp_close",label:"Close CSP"},
+  {id:"deposit",label:"Deposit"},{id:"withdraw",label:"Withdraw"},{id:"dividend",label:"Dividend"},
+];
+
+function showForm(type) {
+  activeForm = { type, date:today(), ticker:"", quantity:"", price:"", premium:"", contracts:"1",
+    strike:"", expiration:"", fees:"", amount:"", notes:"", linkedId:"" };
+  document.getElementById("content").style.display="none";
+  document.getElementById("form-panel").style.display="";
+  renderForm();
+}
+
+function closeForm() {
+  activeForm=null;
+  document.getElementById("form-panel").style.display="none";
+  document.getElementById("content").style.display="";
+}
+
+function renderForm() {
+  if (!activeForm) return;
+  const t = activeForm.type;
+
+  // Type buttons
+  document.getElementById("type-row").innerHTML = TX_TYPES.map(ty=>
+    `<button class="type-btn ${t===ty.id?"active":""}" onclick="switchType('${ty.id}')">${ty.label}</button>`
+  ).join("");
+
+  // Open CSPs for linking
+  const closedIds = new Set(state.transactions.filter(tx=>tx.type==="csp_close"&&tx.linkedId).map(tx=>tx.linkedId));
+  const openCsps = state.transactions.filter(tx=>tx.type==="csp_open"&&!closedIds.has(tx.id));
+
+  let fields = `
+    <div class="field">
+      <label>Date</label>
+      <input class="inp" type="date" value="${activeForm.date}" oninput="activeForm.date=this.value">
+    </div>
+  `;
+
+  if (t==="buy"||t==="sell"||t==="csp_assigned") {
+    fields += `
+      <div class="field"><label>Ticker</label><input class="inp" placeholder="AAPL" value="${activeForm.ticker}" oninput="activeForm.ticker=this.value.toUpperCase();this.value=activeForm.ticker"></div>
+      <div class="field"><label>Shares</label><input class="inp" type="number" placeholder="10" value="${activeForm.quantity}" oninput="activeForm.quantity=this.value"></div>
+      <div class="field full"><label>Price per share $</label><input class="inp" type="number" step="0.01" placeholder="182.50" value="${activeForm.price}" oninput="activeForm.price=this.value"></div>
+    `;
+  }
+  if (t==="csp_open") {
+    fields += `
+      <div class="field"><label>Ticker</label><input class="inp" placeholder="AAPL" value="${activeForm.ticker}" oninput="activeForm.ticker=this.value.toUpperCase();this.value=activeForm.ticker"></div>
+      <div class="field"><label>Put Strike $</label><input class="inp" type="number" placeholder="175" value="${activeForm.strike}" oninput="activeForm.strike=this.value"></div>
+      <div class="field"><label>Expiration</label><input class="inp" type="date" value="${activeForm.expiration}" oninput="activeForm.expiration=this.value"></div>
+      <div class="field"><label>Contracts</label><input class="inp" type="number" min="1" value="${activeForm.contracts||1}" oninput="activeForm.contracts=this.value"></div>
+      <div class="field full"><label>Premium per share $</label><input class="inp" type="number" step="0.01" placeholder="3.10" value="${activeForm.premium}" oninput="activeForm.premium=this.value;updatePnlPreview()"></div>
+    `;
+  }
+  if (t==="csp_close") {
+    const opts = openCsps.map(o=>`<option value="${o.id}" ${activeForm.linkedId===o.id?"selected":""}>${o.ticker} $${o.strike} Put · ${o.contracts}ct · exp ${fmtDate(o.expiration)}</option>`).join("");
+    fields += `
+      <div class="field full"><label>Linked CSP to close</label>
+        <select class="inp inp-sel" oninput="linkCsp(this.value)">
+          <option value="">Select open CSP...</option>${opts}
+        </select>
+      </div>
+      <div class="field full"><label>Close price per share $</label><input class="inp" type="number" step="0.01" placeholder="1.55" value="${activeForm.premium}" oninput="activeForm.premium=this.value;updatePnlPreview()"></div>
+    `;
+  }
+  if (t==="deposit"||t==="withdraw"||t==="dividend") {
+    if (t==="dividend") fields += `<div class="field"><label>Ticker</label><input class="inp" placeholder="AAPL" value="${activeForm.ticker}" oninput="activeForm.ticker=this.value.toUpperCase();this.value=activeForm.ticker"></div>`;
+    fields += `<div class="field ${t==="dividend"?"":"full"}"><label>Amount $</label><input class="inp" type="number" step="0.01" placeholder="1000" value="${activeForm.amount}" oninput="activeForm.amount=this.value"></div>`;
+  }
+  if (["buy","sell","csp_open","csp_close"].includes(t)) {
+    fields += `<div class="field"><label>Fees $ (optional)</label><input class="inp" type="number" step="0.01" placeholder="0.65" value="${activeForm.fees}" oninput="activeForm.fees=this.value"></div>`;
+  }
+  fields += `<div class="field full"><label>Notes (optional)</label><textarea class="inp" style="min-height:60px;resize:vertical;line-height:1.5" placeholder="IV rank, reason, support level..." oninput="activeForm.notes=this.value">${activeForm.notes}</textarea></div>`;
+
+  document.getElementById("form-fields").innerHTML = fields;
+  updatePnlPreview();
+}
+
+function switchType(t) { activeForm.type=t; activeForm.linkedId=""; renderForm(); }
+function linkCsp(id) {
+  const o=state.transactions.find(t=>t.id===id);
+  if(o){activeForm.linkedId=id;activeForm.ticker=o.ticker;activeForm.contracts=o.contracts;activeForm.strike=o.strike;}
+  updatePnlPreview();
+}
+function updatePnlPreview() {
+  const el=document.getElementById("pnl-preview"); if(!el) return;
+  if(activeForm?.type==="csp_close"&&activeForm.linkedId&&activeForm.premium) {
+    const open=state.transactions.find(t=>t.id===activeForm.linkedId);
+    if(open) {
+      const pnl=(Number(open.premium)-Number(activeForm.premium))*(Number(activeForm.contracts)||1)*100;
+      el.style.display="";
+      el.innerHTML=`<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:6px">P&L Preview</div>
+        <div style="font-size:20px;font-weight:800;color:${clr(pnl)}">${pnl>=0?"+":""}${dollar(pnl)}</div>
+      </div>`;
+    }
+  } else { el.style.display="none"; }
+}
+
+function saveTx() {
+  if (!activeForm) return;
+  const t=activeForm.type;
+  if ((t==="buy"||t==="sell")&&(!activeForm.ticker||!activeForm.quantity||!activeForm.price)) return alert("Fill in ticker, shares and price.");
+  if (t==="csp_open"&&(!activeForm.ticker||!activeForm.strike||!activeForm.premium||!activeForm.expiration)) return alert("Fill in all CSP fields.");
+  if (t==="csp_close"&&(!activeForm.linkedId||!activeForm.premium)) return alert("Select an open CSP and enter close price.");
+  if ((t==="deposit"||t==="withdraw"||t==="dividend")&&!activeForm.amount) return alert("Enter an amount.");
+
+  const tx = {...activeForm, id:uid(), createdAt:nowTs()};
+  state.transactions = [tx, ...state.transactions];
+
+  // Cash adjustment
+  if (t==="buy")       state.cash -= (Number(tx.price)||0)*(Number(tx.quantity)||0)+(Number(tx.fees)||0);
+  if (t==="sell")      state.cash += (Number(tx.price)||0)*(Number(tx.quantity)||0)-(Number(tx.fees)||0);
+  if (t==="csp_open")  state.cash += (Number(tx.premium)||0)*(Number(tx.contracts)||1)*100-(Number(tx.fees)||0);
+  if (t==="csp_close") state.cash -= (Number(tx.premium)||0)*(Number(tx.contracts)||1)*100+(Number(tx.fees)||0);
+  if (t==="deposit")   state.cash += Number(tx.amount)||0;
+  if (t==="withdraw")  state.cash -= Number(tx.amount)||0;
+  if (t==="dividend")  state.cash += Number(tx.amount)||0;
+
+  save();
+  closeForm();
+  render();
+}
+
+// ── EXPORT / IMPORT ───────────────────────────────────────────────────────────
+function exportCSV() {
+  const txH="Date,Type,Ticker,Quantity,Price,Premium,Contracts,Strike,Expiration,Fees,Amount,Notes";
+  const txR=state.transactions.map(t=>[t.date,t.type,t.ticker||"",t.quantity||"",t.price||"",t.premium||"",t.contracts||"",t.strike||"",t.expiration||"",t.fees||"",t.amount||"",(t.notes||"").replace(/,/g,"；")].join(","));
+  const sH="Date,Portfolio Value,SPY Price";
+  const sR=state.snapshots.map(s=>[s.date,(s.portfolioValue||0).toFixed(2),(s.spyPrice||"")].join(","));
+  const csv=`TRANSACTIONS\n${txH}\n${txR.join("\n")}\n\nSNAPSHOTS\n${sH}\n${sR.join("\n")}\n\nCASH BALANCE\n${state.cash.toFixed(2)}\n\nExported: ${new Date().toLocaleString()}`;
+  download(csv,"portfolio_export_"+today()+".csv","text/csv");
+}
+
+function exportJSON() {
+  const data={transactions:state.transactions,snapshots:state.snapshots,cash:state.cash,startCash:state.startCash,exportedAt:new Date().toISOString()};
+  download(JSON.stringify(data,null,2),"portfolio_backup_"+today()+".json","application/json");
+}
+
+function importJSON() {
+  try {
+    const raw=document.getElementById("import-json")?.value;
+    if(!raw) return alert("Paste your JSON backup first.");
+    const data=JSON.parse(raw);
+    if(!data.transactions) return alert("Invalid backup format — missing transactions.");
+    if(!confirm(`Import ${data.transactions.length} transactions and ${data.snapshots?.length||0} snapshots? This will replace your current data.`)) return;
+    state.transactions = data.transactions||[];
+    state.snapshots    = data.snapshots||[];
+    state.cash         = data.cash||0;
+    state.startCash    = data.startCash??null;
+    save();
+    alert("Import successful!");
+    render();
+  } catch(e) { alert("Import failed: "+e.message); }
+}
+
+function download(content,filename,type) {
+  const blob=new Blob([content],{type});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download=filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadState();
+render();
+if (Object.keys(calcHoldings().holdings).length > 0) refreshPrices();
+</script>
+</body>
+</html>
