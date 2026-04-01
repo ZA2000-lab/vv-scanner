@@ -635,6 +635,32 @@ def api_csp_refresh():
     return jsonify({"message": "CSP refresh started"}), 202
 
 
+# ── Portfolio tracker price endpoint ────────────────────────────────────────
+
+@app.route("/api/prices")
+def api_prices():
+    """Lightweight price fetcher for portfolio tracker. ?tickers=AAPL,MSFT,SPY"""
+    from flask import request
+    tickers_str = request.args.get("tickers", "")
+    tickers = [t.strip().upper() for t in tickers_str.split(",") if t.strip()]
+    tickers = tickers[:25]  # cap at 25
+    if not tickers:
+        return jsonify({"error": "No tickers provided"}), 400
+
+    prices = {}
+    for sym in tickers:
+        try:
+            t    = yf.Ticker(sym)
+            fi   = t.fast_info
+            px   = getattr(fi, "last_price", None) or getattr(fi, "previous_close", None)
+            if px and float(px) > 0:
+                prices[sym] = round(float(px), 2)
+        except Exception as e:
+            log.debug("Price %s: %s", sym, e)
+
+    return jsonify({"prices": prices, "ts": datetime.now().strftime("%I:%M %p")})
+
+
 @app.route("/api/debug")
 def api_debug():
     out = {
