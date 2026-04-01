@@ -234,6 +234,24 @@ const pctStr  = n => (n>=0?"+":"")+n.toFixed(2)+"%";
 const clr     = n => n>=0?"var(--green)":"var(--red)";
 const daysLeft= exp => exp ? Math.ceil((new Date(exp+"T12:00:00")-new Date())/86400000) : null;
 
+// ── Cash calculation (always computed fresh from transactions) ────────────────
+function calcCash() {
+  let cash = state.startCash || 0;
+  [...state.transactions]
+    .sort((a,b)=>new Date(a.date)-new Date(b.date))
+    .forEach(tx => {
+      if (tx.type==="deposit")      cash += Number(tx.amount)||0;
+      if (tx.type==="withdraw")     cash -= Number(tx.amount)||0;
+      if (tx.type==="dividend")     cash += Number(tx.amount)||0;
+      if (tx.type==="buy")          cash -= (Number(tx.price)||0)*(Number(tx.quantity)||0) + (Number(tx.fees)||0);
+      if (tx.type==="sell")         cash += (Number(tx.price)||0)*(Number(tx.quantity)||0) - (Number(tx.fees)||0);
+      if (tx.type==="csp_open")     cash += (Number(tx.premium)||0)*(Number(tx.contracts)||1)*100 - (Number(tx.fees)||0);
+      if (tx.type==="csp_close")    cash -= (Number(tx.premium)||0)*(Number(tx.contracts)||1)*100 + (Number(tx.fees)||0);
+      if (tx.type==="csp_assigned") cash -= (Number(tx.price)||0)*(Number(tx.quantity)||0) + (Number(tx.fees)||0);
+    });
+  return cash;
+}
+
 // ── Holdings calculation ──────────────────────────────────────────────────────
 function calcHoldings() {
   const lots = {}, realized = {};
@@ -348,8 +366,9 @@ function renderDashboard(c) {
   const totReal   = Object.values(realized).reduce((s,v)=>s+v,0)+optPnL;
   const totUnreal = eh.reduce((s,h)=>s+h.unrealized,0);
   const totMkt    = eh.reduce((s,h)=>s+h.marketValue,0);
-  const portVal   = totMkt+state.cash;
-  const totPnL    = totUnreal+totReal;
+  const cash      = calcCash();  // always computed fresh
+  const portVal   = totMkt + cash;
+  const totPnL    = totUnreal + totReal;
 
   const firstSnap  = state.snapshots[0];
   const spyStart   = firstSnap?.spyPrice;
@@ -361,9 +380,11 @@ function renderDashboard(c) {
 
   const minsAgo = state.priceTs ? Math.round((nowTs()-state.priceTs)/60000) : null;
 
-  // Open CSPs
+  // CSP status — split into open, expired, and expiring soon
   const closedCspIds = new Set(state.transactions.filter(t=>t.type==="csp_close"&&t.linkedId).map(t=>t.linkedId));
-  const openCsps = state.transactions.filter(t=>t.type==="csp_open"&&!closedCspIds.has(t.id));
+  const allOpenCsps  = state.transactions.filter(t=>t.type==="csp_open"&&!closedCspIds.has(t.id));
+  const expiredCsps  = allOpenCsps.filter(t=>t.expiration && new Date(t.expiration+"T23:59:59") < new Date());
+  const openCsps     = allOpenCsps.filter(t=>!t.expiration || new Date(t.expiration+"T23:59:59") >= new Date());
 
   c.innerHTML = `
     <div style="animation:fadeUp .2s ease">
@@ -401,13 +422,13 @@ function renderDashboard(c) {
         </div>
         <div class="stat-card">
           <div class="stat-label">Cash</div>
-          <div class="stat-value" style="color:var(--blue)">${dollar(state.cash)}</div>
-          <div class="stat-sub">Available</div>
+          <div class="stat-value" style="color:var(--blue)">${dollar(cash)}</div>
+          <div class="stat-sub">Deposits − Trades</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Positions</div>
           <div class="stat-value" style="color:var(--muted)">${eh.length}</div>
-          <div class="stat-sub">${openCsps.length} open CSPs</div>
+          <div class="stat-sub">${openCsps.length} open CSPs${expiredCsps.length?` · ${expiredCsps.length} expired`:""}</div>
         </div>
       </div>
 
@@ -473,6 +494,34 @@ function renderDashboard(c) {
                 <div style="font-size:14px;font-weight:700;color:var(--yellow)">${dollar(credit)} credit</div>
                 <div style="font-size:10px;color:var(--green)">Target: +${dollar(credit*0.5)}</div>
               </div>
+            </div>
+          </div>`;
+        }).join("")}
+      ` : ""}
+
+      ${expiredCsps.length > 0 ? `
+        <div style="font-size:10px;color:var(--orange);letter-spacing:.1em;text-transform:uppercase;font-weight:700;margin-top:14px;margin-bottom:8px">⚠ Expired CSPs — Action Required</div>
+        ${expiredCsps.map(t=>{
+          const credit=(Number(t.premium)||0)*(Number(t.contracts)||1)*100;
+          const daysAgo=Math.abs(daysLeft(t.expiration)||0);
+          return `<div class="holding" style="border-color:var(--orange)55;background:#1a0a0088">
+            <div class="holding-top" style="margin-bottom:10px">
+              <div>
+                <div class="ticker-sym">${t.ticker} $${t.strike} Put</div>
+                <div class="ticker-sub" style="color:var(--orange)">Expired ${daysAgo}d ago · ${fmtDate(t.expiration)}</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:13px;font-weight:700;color:var(--yellow)">${dollar(credit)} credit</div>
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--text);margin-bottom:8px">What happened at expiration?</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <button onclick="markCspExpiredWorthless('${t.id}')" style="background:var(--green)18;border:1px solid var(--green)44;border-radius:7px;color:var(--green);font-size:11px;font-weight:700;padding:8px 0">
+                ✓ Expired Worthless<br><span style="font-size:10px;font-weight:400">Keep full ${dollar(credit)} credit</span>
+              </button>
+              <button onclick="markCspAssigned('${t.id}')" style="background:var(--purple)18;border:1px solid var(--purple)44;border-radius:7px;color:var(--purple);font-size:11px;font-weight:700;padding:8px 0">
+                → Got Assigned<br><span style="font-size:10px;font-weight:400">Own ${t.contracts}×100 ${t.ticker} shares</span>
+              </button>
             </div>
           </div>`;
         }).join("")}
@@ -715,24 +764,24 @@ function renderForm() {
   let fields = `
     <div class="field">
       <label>Date</label>
-      <input class="inp" type="date" value="${activeForm.date}" oninput="activeForm.date=this.value">
+      <input id="f-date" class="inp" type="date" value="${activeForm.date}">
     </div>
   `;
 
   if (t==="buy"||t==="sell"||t==="csp_assigned") {
     fields += `
-      <div class="field"><label>Ticker</label><input class="inp" placeholder="AAPL" value="${activeForm.ticker}" oninput="activeForm.ticker=this.value.toUpperCase();this.value=activeForm.ticker"></div>
-      <div class="field"><label>Shares</label><input class="inp" type="number" placeholder="10" value="${activeForm.quantity}" oninput="activeForm.quantity=this.value"></div>
-      <div class="field full"><label>Price per share $</label><input class="inp" type="number" step="0.01" placeholder="182.50" value="${activeForm.price}" oninput="activeForm.price=this.value"></div>
+      <div class="field"><label>Ticker</label><input id="f-ticker" class="inp" placeholder="AAPL" value="${activeForm.ticker}" style="text-transform:uppercase"></div>
+      <div class="field"><label>Shares</label><input id="f-quantity" class="inp" type="number" placeholder="10" value="${activeForm.quantity}"></div>
+      <div class="field full"><label>Price per share $</label><input id="f-price" class="inp" type="number" step="0.01" placeholder="182.50" value="${activeForm.price}"></div>
     `;
   }
   if (t==="csp_open") {
     fields += `
-      <div class="field"><label>Ticker</label><input class="inp" placeholder="AAPL" value="${activeForm.ticker}" oninput="activeForm.ticker=this.value.toUpperCase();this.value=activeForm.ticker"></div>
-      <div class="field"><label>Put Strike $</label><input class="inp" type="number" placeholder="175" value="${activeForm.strike}" oninput="activeForm.strike=this.value"></div>
-      <div class="field"><label>Expiration</label><input class="inp" type="date" value="${activeForm.expiration}" oninput="activeForm.expiration=this.value"></div>
-      <div class="field"><label>Contracts</label><input class="inp" type="number" min="1" value="${activeForm.contracts||1}" oninput="activeForm.contracts=this.value"></div>
-      <div class="field full"><label>Premium per share $</label><input class="inp" type="number" step="0.01" placeholder="3.10" value="${activeForm.premium}" oninput="activeForm.premium=this.value;updatePnlPreview()"></div>
+      <div class="field"><label>Ticker</label><input id="f-ticker" class="inp" placeholder="AAPL" value="${activeForm.ticker}" style="text-transform:uppercase"></div>
+      <div class="field"><label>Put Strike $</label><input id="f-strike" class="inp" type="number" placeholder="175" value="${activeForm.strike}"></div>
+      <div class="field"><label>Expiration</label><input id="f-expiration" class="inp" type="date" value="${activeForm.expiration}"></div>
+      <div class="field"><label>Contracts</label><input id="f-contracts" class="inp" type="number" min="1" value="${activeForm.contracts||1}"></div>
+      <div class="field full"><label>Premium per share $</label><input id="f-premium" class="inp" type="number" step="0.01" placeholder="3.10" value="${activeForm.premium}" oninput="activeForm.premium=this.value;updatePnlPreview()"></div>
     `;
   }
   if (t==="csp_close") {
@@ -743,17 +792,17 @@ function renderForm() {
           <option value="">Select open CSP...</option>${opts}
         </select>
       </div>
-      <div class="field full"><label>Close price per share $</label><input class="inp" type="number" step="0.01" placeholder="1.55" value="${activeForm.premium}" oninput="activeForm.premium=this.value;updatePnlPreview()"></div>
+      <div class="field full"><label>Close price per share $</label><input id="f-premium" class="inp" type="number" step="0.01" placeholder="1.55" value="${activeForm.premium}" oninput="activeForm.premium=this.value;updatePnlPreview()"></div>
     `;
   }
   if (t==="deposit"||t==="withdraw"||t==="dividend") {
-    if (t==="dividend") fields += `<div class="field"><label>Ticker</label><input class="inp" placeholder="AAPL" value="${activeForm.ticker}" oninput="activeForm.ticker=this.value.toUpperCase();this.value=activeForm.ticker"></div>`;
-    fields += `<div class="field ${t==="dividend"?"":"full"}"><label>Amount $</label><input class="inp" type="number" step="0.01" placeholder="1000" value="${activeForm.amount}" oninput="activeForm.amount=this.value"></div>`;
+    if (t==="dividend") fields += `<div class="field"><label>Ticker</label><input id="f-ticker" class="inp" placeholder="AAPL" value="${activeForm.ticker}" style="text-transform:uppercase"></div>`;
+    fields += `<div class="field ${t==="dividend"?"":"full"}"><label>Amount $</label><input id="f-amount" class="inp" type="number" step="0.01" placeholder="1000" value="${activeForm.amount}"></div>`;
   }
   if (["buy","sell","csp_open","csp_close"].includes(t)) {
-    fields += `<div class="field"><label>Fees $ (optional)</label><input class="inp" type="number" step="0.01" placeholder="0.65" value="${activeForm.fees}" oninput="activeForm.fees=this.value"></div>`;
+    fields += `<div class="field"><label>Fees $ (optional)</label><input id="f-fees" class="inp" type="number" step="0.01" placeholder="0.65" value="${activeForm.fees}"></div>`;
   }
-  fields += `<div class="field full"><label>Notes (optional)</label><textarea class="inp" style="min-height:60px;resize:vertical;line-height:1.5" placeholder="IV rank, reason, support level..." oninput="activeForm.notes=this.value">${activeForm.notes}</textarea></div>`;
+  fields += `<div class="field full"><label>Notes (optional)</label><textarea id="f-notes" class="inp" style="min-height:60px;resize:vertical;line-height:1.5" placeholder="IV rank, reason, support level...">${activeForm.notes}</textarea></div>`;
 
   document.getElementById("form-fields").innerHTML = fields;
   updatePnlPreview();
@@ -780,9 +829,61 @@ function updatePnlPreview() {
   } else { el.style.display="none"; }
 }
 
+// ── Expired CSP handlers ─────────────────────────────────────────────────────
+function markCspExpiredWorthless(openId) {
+  const open = state.transactions.find(t=>t.id===openId);
+  if (!open) return;
+  // Close at $0 — expired worthless, keep full credit
+  const tx = { id:uid(), type:"csp_close", date:open.expiration||today(),
+    ticker:open.ticker, premium:"0", contracts:open.contracts,
+    strike:open.strike, linkedId:openId, fees:"0",
+    notes:"Expired worthless — full credit kept", createdAt:nowTs() };
+  state.transactions = [tx, ...state.transactions];
+  // No cash adjustment — credit was already received on open, nothing paid to close
+  save(); render();
+}
+
+function markCspAssigned(openId) {
+  const open = state.transactions.find(t=>t.id===openId);
+  if (!open) return;
+  // Close the CSP at $0 (expires ITM, no buyback cost since assigned)
+  const closeTx = { id:uid(), type:"csp_close", date:open.expiration||today(),
+    ticker:open.ticker, premium:"0", contracts:open.contracts,
+    strike:open.strike, linkedId:openId, fees:"0",
+    notes:"Assigned at expiration", createdAt:nowTs() };
+  // Add stock position — buy shares at strike price
+  const contracts = Number(open.contracts)||1;
+  const buyTx = { id:uid(), type:"csp_assigned", date:open.expiration||today(),
+    ticker:open.ticker, quantity:String(contracts*100),
+    price:open.strike, fees:"0",
+    notes:`Assigned from CSP — ${contracts} contract${contracts>1?"s":""} at $${open.strike}`,
+    createdAt:nowTs() };
+  state.transactions = [closeTx, buyTx, ...state.transactions];
+  // Cash: pay for shares at strike (assignment debits account)
+  // Note: calcCash handles this automatically since buyTx is type csp_assigned
+  // which isn't in the cash calc — so we handle it via buy logic
+  save(); render();
+  alert(`Assigned! ${contracts*100} ${open.ticker} shares added at $${open.strike}. Go to + Add → Open CSP Close to sell covered calls.`);
+}
+
 function saveTx() {
   if (!activeForm) return;
-  const t=activeForm.type;
+  const t = activeForm.type;
+
+  // Read all values fresh from DOM at save time (more reliable than oninput on iOS)
+  const getVal = id => document.getElementById(id)?.value || "";
+  if (document.getElementById("f-date"))       activeForm.date       = getVal("f-date");
+  if (document.getElementById("f-ticker"))     activeForm.ticker     = getVal("f-ticker").toUpperCase();
+  if (document.getElementById("f-quantity"))   activeForm.quantity   = getVal("f-quantity");
+  if (document.getElementById("f-price"))      activeForm.price      = getVal("f-price");
+  if (document.getElementById("f-premium"))    activeForm.premium    = getVal("f-premium");
+  if (document.getElementById("f-contracts"))  activeForm.contracts  = getVal("f-contracts");
+  if (document.getElementById("f-strike"))     activeForm.strike     = getVal("f-strike");
+  if (document.getElementById("f-expiration")) activeForm.expiration = getVal("f-expiration");
+  if (document.getElementById("f-fees"))       activeForm.fees       = getVal("f-fees");
+  if (document.getElementById("f-amount"))     activeForm.amount     = getVal("f-amount");
+  if (document.getElementById("f-notes"))      activeForm.notes      = getVal("f-notes");
+
   if ((t==="buy"||t==="sell")&&(!activeForm.ticker||!activeForm.quantity||!activeForm.price)) return alert("Fill in ticker, shares and price.");
   if (t==="csp_open"&&(!activeForm.ticker||!activeForm.strike||!activeForm.premium||!activeForm.expiration)) return alert("Fill in all CSP fields.");
   if (t==="csp_close"&&(!activeForm.linkedId||!activeForm.premium)) return alert("Select an open CSP and enter close price.");
@@ -790,16 +891,7 @@ function saveTx() {
 
   const tx = {...activeForm, id:uid(), createdAt:nowTs()};
   state.transactions = [tx, ...state.transactions];
-
-  // Cash adjustment
-  if (t==="buy")       state.cash -= (Number(tx.price)||0)*(Number(tx.quantity)||0)+(Number(tx.fees)||0);
-  if (t==="sell")      state.cash += (Number(tx.price)||0)*(Number(tx.quantity)||0)-(Number(tx.fees)||0);
-  if (t==="csp_open")  state.cash += (Number(tx.premium)||0)*(Number(tx.contracts)||1)*100-(Number(tx.fees)||0);
-  if (t==="csp_close") state.cash -= (Number(tx.premium)||0)*(Number(tx.contracts)||1)*100+(Number(tx.fees)||0);
-  if (t==="deposit")   state.cash += Number(tx.amount)||0;
-  if (t==="withdraw")  state.cash -= Number(tx.amount)||0;
-  if (t==="dividend")  state.cash += Number(tx.amount)||0;
-
+  // Cash is now always computed via calcCash() — no manual adjustment needed
   save();
   closeForm();
   render();
