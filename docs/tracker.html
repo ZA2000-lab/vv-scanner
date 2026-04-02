@@ -212,6 +212,7 @@ let state = {
   transactions: [],
   snapshots: [],
   prices: {},
+  optionPrices: {},
   priceTs: 0,
   cash: 0,
   startCash: null,
@@ -229,6 +230,8 @@ function loadState() {
   state.snapshots    = LS.get("pt_snapshots")    || [];
   const px           = LS.get("pt_prices");
   if (px) { state.prices = px.data||{}; state.priceTs = px.ts||0; }
+  const opx          = LS.get("pt_option_prices");
+  if (opx) { state.optionPrices = opx.data||{}; }
   const c = LS.get("pt_cash");
   if (c !== null) state.cash = c;
   state.startCash = LS.get("pt_startcash");
@@ -350,24 +353,48 @@ async function refreshPrices(force=false) {
   if (!force && nowTs()-state.priceTs < PRICE_TTL) return;
   const {holdings} = calcHoldings();
   const tickers = [...new Set([...Object.keys(holdings),"SPY"])];
-  if (!tickers.length) return;
 
   const icon  = document.getElementById("refresh-icon");
   const label = document.getElementById("refresh-label");
   icon.classList.add("spin"); label.textContent="Loading...";
 
   try {
-    const res  = await fetch(`${API}/api/prices?tickers=${tickers.join(",")}`);
-    const data = await res.json();
-    if (data.prices && Object.keys(data.prices).length > 0) {
-      state.prices  = data.prices;
-      state.priceTs = nowTs();
-      LS.set("pt_prices", {data:data.prices, ts:nowTs()});
+    // Fetch stock prices
+    const stockPromise = tickers.length
+      ? fetch(`${API}/api/prices?tickers=${tickers.join(",")}`)
+          .then(r=>r.json()).catch(()=>({prices:{}}))
+      : Promise.resolve({prices:{}});
 
-      // Save snapshot
+    // Fetch option prices for open options (CSPs + regular options)
+    const closedCspIds = new Set(state.transactions.filter(t=>t.type==="csp_close"&&t.linkedId).map(t=>t.linkedId));
+    const openCsps = state.transactions.filter(t=>t.type==="csp_open"&&!closedCspIds.has(t.id));
+    const closedOptIds = new Set(state.transactions.filter(t=>t.type==="opt_close"&&t.linkedId).map(t=>t.linkedId));
+    const openOpts = state.transactions.filter(t=>(t.type==="opt_buy"||t.type==="opt_sell")&&!closedOptIds.has(t.id));
+
+    const optContracts = [
+      ...openCsps.map(t=>({id:t.id, ticker:t.ticker, optionType:"put", strike:Number(t.strike), expiration:t.expiration, contracts:Number(t.contracts)||1})),
+      ...openOpts.map(t=>({id:t.id, ticker:t.ticker, optionType:t.optionType||"call", strike:Number(t.strike), expiration:t.expiration, contracts:Number(t.contracts)||1})),
+    ].slice(0,10);
+
+    const optPromise = optContracts.length
+      ? fetch(`${API}/api/option-prices`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(optContracts)})
+          .then(r=>r.json()).catch(()=>({prices:{}}))
+      : Promise.resolve({prices:{}});
+
+    const [stockData, optData] = await Promise.all([stockPromise, optPromise]);
+
+    if (Object.keys(stockData.prices||{}).length > 0) {
+      state.prices = stockData.prices;
+      state.priceTs = nowTs();
+      state.optionPrices = optData.prices || {};
+      LS.set("pt_prices", {data:stockData.prices, ts:nowTs()});
+      LS.set("pt_option_prices", {data:state.optionPrices, ts:nowTs()});
+
+      // Save daily snapshot
       const eh  = getEnrichedHoldings();
       const mkt = eh.reduce((s,h)=>s+h.marketValue,0);
-      const snap = {date:today(), portfolioValue:mkt+state.cash, spyPrice:data.prices["SPY"], timestamp:nowTs()};
+      const cash = calcCash();
+      const snap = {date:today(), portfolioValue:mkt+cash, spyPrice:stockData.prices["SPY"], timestamp:nowTs()};
       state.snapshots = [...state.snapshots.filter(s=>s.date!==today()), snap]
         .sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(-365);
       LS.set("pt_snapshots", state.snapshots);
@@ -523,8 +550,13 @@ function renderDashboard(c) {
       ${openCsps.length > 0 ? `
         <div style="font-size:10px;color:var(--purple);letter-spacing:.1em;text-transform:uppercase;font-weight:700;margin-top:14px;margin-bottom:8px">Open CSPs</div>
         ${openCsps.map(t=>{
-          const dl=daysLeft(t.expiration);
-          const credit=(Number(t.premium)||0)*(Number(t.contracts)||1)*100;
+          const dl     = daysLeft(t.expiration);
+          const credit = (Number(t.premium)||0)*(Number(t.contracts)||1)*100;
+          const op     = state.optionPrices[t.id];
+          const currMid= op?.mid;
+          const currVal= currMid!=null ? currMid*(Number(t.contracts)||1)*100 : null;
+          const unreal = currVal!=null ? credit-currVal : null;
+          const pctDone= currMid!=null&&Number(t.premium)>0 ? (Number(t.premium)-currMid)/Number(t.premium)*100 : null;
           return `<div class="holding" style="border-color:var(--purple)33">
             <div class="holding-top">
               <div>
@@ -533,9 +565,25 @@ function renderDashboard(c) {
               </div>
               <div style="text-align:right">
                 <div style="font-size:14px;font-weight:700;color:var(--yellow)">${dollar(credit)} credit</div>
-                <div style="font-size:10px;color:var(--green)">Target: +${dollar(credit*0.5)}</div>
+                ${op?.underlying?`<div style="font-size:10px;color:var(--blue)">Stock: $${op.underlying} ●</div>`:`<div style="font-size:10px;color:var(--green)">Target: +${dollar(credit*0.5)}</div>`}
               </div>
             </div>
+            ${currMid!=null?`
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <span style="font-size:11px;color:var(--muted)">Current: <strong style="color:var(--bright)">$${currMid.toFixed(2)}</strong>${op?.bid&&op?.ask?` ($${op.bid}/$${op.ask})`:""}</span>
+                <span style="font-size:12px;font-weight:700;color:${unreal>=0?"var(--green)":"var(--red)"}">${unreal>=0?"+":""}${dollar(unreal)}</span>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--dim);margin-bottom:3px">
+                  <span>Opened $${Number(t.premium).toFixed(2)}</span>
+                  <span style="color:var(--green)">50% = $${(Number(t.premium)*0.5).toFixed(2)}</span>
+                  <span>${pctDone!=null?pctDone.toFixed(0)+"% done":""}</span>
+                </div>
+                <div style="background:var(--border);border-radius:3px;height:5px;overflow:hidden">
+                  <div style="width:${Math.min(100,Math.max(0,pctDone||0))}%;height:100%;background:${(pctDone||0)>=50?"var(--green)":"var(--yellow)"};border-radius:3px"></div>
+                </div>
+              </div>
+            `:`<div style="font-size:10px;color:var(--dim);margin-top:4px">↻ Refresh for live option price</div>`}
           </div>`;
         }).join("")}
       ` : ""}
@@ -543,21 +591,34 @@ function renderDashboard(c) {
       ${openOpts.length > 0 ? `
         <div style="font-size:10px;color:var(--blue);letter-spacing:.1em;text-transform:uppercase;font-weight:700;margin-top:14px;margin-bottom:8px">Open Options</div>
         ${openOpts.map(t=>{
-          const dl=daysLeft(t.expiration);
-          const cost=(Number(t.premium)||0)*(Number(t.contracts)||1)*100;
-          const isBuy=t.type==="opt_buy";
+          const dl      = daysLeft(t.expiration);
+          const cost    = (Number(t.premium)||0)*(Number(t.contracts)||1)*100;
+          const isBuy   = t.type==="opt_buy";
           const typeLabel=(t.optionType||"option").charAt(0).toUpperCase()+(t.optionType||"option").slice(1);
+          const op      = state.optionPrices[t.id];
+          const currMid = op?.mid;
+          const currVal = currMid!=null ? currMid*(Number(t.contracts)||1)*100 : null;
+          // Long: profit when price rises. Short: profit when price falls.
+          const unreal  = currVal!=null ? (isBuy ? currVal-cost : cost-currVal) : null;
+          const unrPct  = unreal!=null&&cost>0 ? unreal/cost*100 : null;
           return `<div class="holding" style="border-color:${isBuy?"var(--blue)":"var(--orange)"}33">
             <div class="holding-top">
               <div>
                 <div class="ticker-sym">${t.ticker} $${t.strike} ${typeLabel}</div>
-                <div class="ticker-sub">${isBuy?"Long":"Short"} · Exp: ${fmtDate(t.expiration)}${dl!==null?` (${dl}d)`:""}${dl!==null&&dl<=7?" 🔴 expiring soon":dl!==null&&dl<=21?" ⚠ expiring":""}</div>
+                <div class="ticker-sub">${isBuy?"Long ▲":"Short ▼"} · Exp: ${fmtDate(t.expiration)}${dl!==null?` (${dl}d)`:""}${dl!==null&&dl<=7?" 🔴 exp soon":dl!==null&&dl<=21?" ⚠ expiring":""}</div>
               </div>
               <div style="text-align:right">
-                <div style="font-size:14px;font-weight:700;color:${isBuy?"var(--blue)":"var(--orange)"}">${isBuy?"-":"+"} ${dollar(cost)}</div>
-                <div style="font-size:10px;color:var(--muted)">${t.contracts}ct @ $${Number(t.premium).toFixed(2)}</div>
+                <div style="font-size:13px;font-weight:700;color:${isBuy?"var(--blue)":"var(--orange)"}">${isBuy?"-":"+"}${dollar(cost)}</div>
+                ${op?.underlying?`<div style="font-size:10px;color:var(--blue)">Stock: $${op.underlying} ●</div>`:`<div style="font-size:10px;color:var(--muted)">${t.contracts}ct @ $${Number(t.premium).toFixed(2)}</div>`}
               </div>
             </div>
+            ${currMid!=null?`
+              <div class="bar-wrap">
+                <div style="font-size:11px;color:var(--muted);flex-shrink:0">Now: <strong style="color:var(--bright)">$${currMid.toFixed(2)}</strong>${op?.bid&&op?.ask?` ($${op.bid}/$${op.ask})`:""}</div>
+                <div style="flex:1"></div>
+                <div style="font-size:12px;font-weight:700;color:${unreal>=0?"var(--green)":"var(--red)"}">${unreal>=0?"+":""}${dollar(unreal)} (${unrPct>=0?"+":""}${unrPct?.toFixed(1)}%)</div>
+              </div>
+            `:`<div style="font-size:10px;color:var(--dim);margin-top:4px">↻ Refresh for live option price</div>`}
           </div>`;
         }).join("")}
       ` : ""}
