@@ -49,14 +49,32 @@ _csp_cache = {
     "running": False, "progress": {"done":0,"total":0,"phase":"idle"},
 }
 
-# Layer 2 universe — quality large caps with liquid options
+# Layer 2 universe — quality stocks with liquid options
 CSP_UNIVERSE = [
-    "AAPL","MSFT","GOOGL","AMZN","META","V","MA","JPM","BAC","GS",
-    "JNJ","UNH","HD","COST","WMT","PG","KO","MCD","XOM","CVX",
-    "AMD","TSLA","NFLX","ORCL","CRM","ADBE","QCOM","INTC","TXN",
-    "MS","BLK","SCHW","LLY","ABBV","MRK","PFE","AMGN",
-    "SPY","QQQ","IWM","XLE","XLF","XLK","GLD","SMH",
+    # Mega-cap tech
+    "AAPL","MSFT","GOOGL","AMZN","META","NVDA","TSLA","AMD","ORCL","ADBE",
+    "CRM","NOW","INTU","PANW","CRWD","NET","DDOG","SNOW","MDB","PLTR",
+    "INTC","QCOM","TXN","AVGO","ARM","AMAT","LRCX","MU","SMCI","ON",
+    # Financials
+    "JPM","BAC","GS","MS","WFC","C","BLK","SCHW","V","MA","AXP","PYPL","COIN","SOFI",
+    # Healthcare
+    "UNH","LLY","JNJ","ABBV","MRK","PFE","AMGN","GILD","VRTX","REGN","ISRG","MRNA",
+    # Consumer
+    "AMZN","WMT","COST","HD","TGT","MCD","SBUX","NKE","BKNG","ABNB","UBER","DASH",
+    # Industrials / Energy
+    "XOM","CVX","COP","OXY","SLB","BA","CAT","GE","HON","RTX","LMT","UPS","FDX",
+    # Media / Entertainment
+    "NFLX","DIS","SPOT","SNAP","PINS","RBLX",
+    # Other quality large-caps
+    "BRK-B","PG","KO","PEP","WBA","T","VZ","IBM","DELL","HPQ",
+    # High-vol / momentum (premium-rich)
+    "MSTR","COIN","HOOD","RIVN","NIO","GME","MARA","RIOT",
+    # ETFs (liquid, tight spreads)
+    "SPY","QQQ","IWM","DIA","GLD","SLV","TLT","HYG","XLE","XLF","XLK","XLV","XLI",
+    "SMH","ARKK","SOXX","IBB","GDX","USO",
 ]
+# Remove duplicates while preserving order
+CSP_UNIVERSE = list(dict.fromkeys(CSP_UNIVERSE))
 
 NASDAQ_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -661,7 +679,91 @@ def api_prices():
     return jsonify({"prices": prices, "ts": datetime.now().strftime("%I:%M %p")})
 
 
-@app.route("/api/debug")
+@app.route("/api/option-prices", methods=["POST"])
+def api_option_prices():
+    """
+    Fetch live mid prices for specific option contracts.
+    POST body JSON: [{"id":"abc","ticker":"AAPL","optionType":"call","strike":175,"expiration":"2026-05-16","contracts":1}, ...]
+    Returns: {"prices": {"abc": {"mid": 3.45, "bid": 3.40, "ask": 3.50, "underlying": 182.50, "dte": 12}}}
+    """
+    from flask import request
+    try:
+        contracts = request.get_json(force=True) or []
+    except Exception:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    contracts = contracts[:10]  # cap at 10 option contracts
+    results = {}
+    today_d = date.today()
+
+    for c in contracts:
+        cid         = c.get("id", "")
+        ticker      = (c.get("ticker") or "").upper()
+        opt_type    = (c.get("optionType") or "call").lower()
+        strike      = float(c.get("strike") or 0)
+        expiration  = c.get("expiration") or ""
+        if not ticker or not strike or not expiration:
+            continue
+        try:
+            stock = yf.Ticker(ticker)
+            # Get underlying price
+            fi = stock.fast_info
+            underlying = float(getattr(fi, "last_price", None) or getattr(fi, "previous_close", None) or 0)
+
+            # Get options chain for this expiration
+            opts = stock.options
+            if not opts:
+                continue
+
+            # Find closest available expiry to requested
+            exp_date = datetime.strptime(expiration, "%Y-%m-%d").date()
+            best_exp = min(opts, key=lambda e: abs((datetime.strptime(e, "%Y-%m-%d").date() - exp_date).days))
+
+            chain = stock.option_chain(best_exp)
+            df = chain.calls if opt_type == "call" else chain.puts
+
+            if df.empty:
+                continue
+
+            # Find the closest strike
+            df = df.copy()
+            df["dist"] = (df["strike"] - strike).abs()
+            row = df.loc[df["dist"].idxmin()]
+
+            bid  = float(row.get("bid", 0) or 0)
+            ask  = float(row.get("ask", 0) or 0)
+            last = float(row.get("lastPrice", 0) or 0)
+            iv   = float(row.get("impliedVolatility", 0) or 0)
+
+            # Mid price — prefer bid/ask if valid, fallback to last
+            if bid > 0 and ask > 0:
+                mid = round((bid + ask) / 2, 2)
+            elif last > 0:
+                mid = round(last, 2)
+            else:
+                mid = None
+
+            actual_exp = datetime.strptime(best_exp, "%Y-%m-%d").date()
+            dte = max(0, (actual_exp - today_d).days)
+
+            results[cid] = {
+                "mid":        mid,
+                "bid":        round(bid, 2),
+                "ask":        round(ask, 2),
+                "underlying": round(underlying, 2),
+                "dte":        dte,
+                "iv":         round(iv * 100, 1) if iv else None,
+                "expUsed":    best_exp,
+                "strikeUsed": float(row["strike"]),
+            }
+        except Exception as e:
+            log.debug("Option price %s %s %s: %s", ticker, opt_type, strike, e)
+            continue
+
+    return jsonify({"prices": results, "ts": datetime.now().strftime("%I:%M %p")})
+
+
+
 def api_debug():
     out = {
         "universe":  len(_cache["universe"]),
