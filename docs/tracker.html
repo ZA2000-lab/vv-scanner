@@ -119,8 +119,23 @@
     /* Import */
     .import-area { width:100%;min-height:80px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:10px;resize:vertical;line-height:1.5; }
 
-    /* Alert */
-    .alert { border-radius:8px;padding:10px 12px;font-size:11px;line-height:1.6;margin-bottom:10px; }
+    /* Monthly calendar grid */
+    .cal-grid { display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-bottom:4px; }
+    .cal-cell { border-radius:5px;padding:4px 2px;text-align:center;font-size:9px;font-weight:700; }
+    .cal-header { font-size:9px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase; }
+
+    /* Metric row */
+    .metric-row { display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border); }
+    .metric-label { font-size:12px;color:var(--muted); }
+    .metric-val   { font-size:13px;font-weight:700;color:var(--bright); }
+
+    /* Win rate bar */
+    .wr-bar { display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:4px; }
+
+    /* Comparison ring — simple text-based */
+    .ring-wrap { display:flex;flex-direction:column;align-items:center;gap:2px; }
+    .ring-val  { font-size:22px;font-weight:900;line-height:1; }
+    .ring-lbl  { font-size:9px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase; }
     .alert-warn { background:#1a1000;border:1px solid var(--yellow)44;border-left:3px solid var(--yellow);color:var(--text); }
     .alert-red  { background:#1a0208;border:1px solid var(--red)44;border-left:3px solid var(--red);color:var(--text); }
     .alert-green{ background:#001a0d;border:1px solid var(--green)22;border-left:3px solid var(--green);color:var(--text); }
@@ -170,6 +185,9 @@
   <div id="nav">
     <button class="nav-btn active" id="nav-dashboard" onclick="setTab('dashboard')">
       <span class="nav-icon">◈</span>Portfolio
+    </button>
+    <button class="nav-btn" id="nav-analytics" onclick="setTab('analytics')">
+      <span class="nav-icon">◎</span>Analytics
     </button>
     <button class="nav-btn" id="nav-chart" onclick="setTab('chart')">
       <span class="nav-icon">↗</span>Chart
@@ -247,7 +265,15 @@ function calcCash() {
       if (tx.type==="sell")         cash += (Number(tx.price)||0)*(Number(tx.quantity)||0) - (Number(tx.fees)||0);
       if (tx.type==="csp_open")     cash += (Number(tx.premium)||0)*(Number(tx.contracts)||1)*100 - (Number(tx.fees)||0);
       if (tx.type==="csp_close")    cash -= (Number(tx.premium)||0)*(Number(tx.contracts)||1)*100 + (Number(tx.fees)||0);
-      if (tx.type==="csp_assigned") cash -= (Number(tx.price)||0)*(Number(tx.quantity)||0) + (Number(tx.fees)||0);
+      if (tx.type==="opt_buy")      cash -= (Number(tx.premium)||0)*(Number(tx.contracts)||1)*100 + (Number(tx.fees)||0);
+      if (tx.type==="opt_sell")     cash += (Number(tx.premium)||0)*(Number(tx.contracts)||1)*100 - (Number(tx.fees)||0);
+      if (tx.type==="opt_close") {
+        // find original to know direction
+        const orig = state.transactions.find(o=>o.id===tx.linkedId);
+        const closePx = (Number(tx.premium)||0)*(Number(tx.contracts||orig?.contracts)||1)*100;
+        if (orig?.type==="opt_buy")  cash += closePx - (Number(tx.fees)||0); // sell to close a long
+        if (orig?.type==="opt_sell") cash -= closePx + (Number(tx.fees)||0); // buy to close a short
+      }
     });
   return cash;
 }
@@ -287,13 +313,25 @@ function calcHoldings() {
 
 function calcOptionPnL() {
   let total=0;
-  const opens={};
-  state.transactions.filter(t=>t.type==="csp_open").forEach(t=>{opens[t.id]=t;});
+  // CSP P&L
+  const cspOpens={};
+  state.transactions.filter(t=>t.type==="csp_open").forEach(t=>{cspOpens[t.id]=t;});
   state.transactions.filter(t=>t.type==="csp_close"&&t.linkedId).forEach(t=>{
-    const o=opens[t.linkedId]; if(!o) return;
+    const o=cspOpens[t.linkedId]; if(!o) return;
     total+=(Number(o.premium)||0)*(Number(o.contracts)||1)*100
           -(Number(t.premium)||0)*(Number(t.contracts)||1)*100
           -(Number(t.fees)||0);
+  });
+  // Regular option P&L
+  const optOpens={};
+  state.transactions.filter(t=>t.type==="opt_buy"||t.type==="opt_sell").forEach(t=>{optOpens[t.id]=t;});
+  state.transactions.filter(t=>t.type==="opt_close"&&t.linkedId).forEach(t=>{
+    const o=optOpens[t.linkedId]; if(!o) return;
+    const openPx  = (Number(o.premium)||0)*(Number(o.contracts)||1)*100;
+    const closePx = (Number(t.premium)||0)*(Number(t.contracts||o.contracts)||1)*100;
+    const fees    = Number(t.fees)||0;
+    if (o.type==="opt_buy")  total += closePx - openPx - fees; // long: sell to close
+    if (o.type==="opt_sell") total += openPx - closePx - fees; // short: buy to close
   });
   return total;
 }
@@ -353,9 +391,10 @@ function setTab(tab) {
 
 function render() {
   const c=document.getElementById("content");
-  if (state.activeTab==="dashboard") { c.style.display=""; renderDashboard(c); }
-  else if (state.activeTab==="chart")   { c.style.display=""; renderChart(c); }
-  else if (state.activeTab==="history") { c.style.display=""; renderHistory(c); }
+  if (state.activeTab==="dashboard")  { c.style.display=""; renderDashboard(c); }
+  else if (state.activeTab==="analytics") { c.style.display=""; renderAnalytics(c); }
+  else if (state.activeTab==="chart")     { c.style.display=""; renderChart(c); }
+  else if (state.activeTab==="history")   { c.style.display=""; renderHistory(c); }
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
@@ -380,7 +419,9 @@ function renderDashboard(c) {
 
   const minsAgo = state.priceTs ? Math.round((nowTs()-state.priceTs)/60000) : null;
 
-  // CSP status — split into open, expired, and expiring soon
+  // Open regular options
+  const closedOptIds = new Set(state.transactions.filter(t=>t.type==="opt_close"&&t.linkedId).map(t=>t.linkedId));
+  const openOpts = state.transactions.filter(t=>(t.type==="opt_buy"||t.type==="opt_sell")&&!closedOptIds.has(t.id));
   const closedCspIds = new Set(state.transactions.filter(t=>t.type==="csp_close"&&t.linkedId).map(t=>t.linkedId));
   const allOpenCsps  = state.transactions.filter(t=>t.type==="csp_open"&&!closedCspIds.has(t.id));
   const expiredCsps  = allOpenCsps.filter(t=>t.expiration && new Date(t.expiration+"T23:59:59") < new Date());
@@ -499,7 +540,27 @@ function renderDashboard(c) {
         }).join("")}
       ` : ""}
 
-      ${expiredCsps.length > 0 ? `
+      ${openOpts.length > 0 ? `
+        <div style="font-size:10px;color:var(--blue);letter-spacing:.1em;text-transform:uppercase;font-weight:700;margin-top:14px;margin-bottom:8px">Open Options</div>
+        ${openOpts.map(t=>{
+          const dl=daysLeft(t.expiration);
+          const cost=(Number(t.premium)||0)*(Number(t.contracts)||1)*100;
+          const isBuy=t.type==="opt_buy";
+          const typeLabel=(t.optionType||"option").charAt(0).toUpperCase()+(t.optionType||"option").slice(1);
+          return `<div class="holding" style="border-color:${isBuy?"var(--blue)":"var(--orange)"}33">
+            <div class="holding-top">
+              <div>
+                <div class="ticker-sym">${t.ticker} $${t.strike} ${typeLabel}</div>
+                <div class="ticker-sub">${isBuy?"Long":"Short"} · Exp: ${fmtDate(t.expiration)}${dl!==null?` (${dl}d)`:""}${dl!==null&&dl<=7?" 🔴 expiring soon":dl!==null&&dl<=21?" ⚠ expiring":""}</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:14px;font-weight:700;color:${isBuy?"var(--blue)":"var(--orange)"}">${isBuy?"-":"+"} ${dollar(cost)}</div>
+                <div style="font-size:10px;color:var(--muted)">${t.contracts}ct @ $${Number(t.premium).toFixed(2)}</div>
+              </div>
+            </div>
+          </div>`;
+        }).join("")}
+      ` : ""}
         <div style="font-size:10px;color:var(--orange);letter-spacing:.1em;text-transform:uppercase;font-weight:700;margin-top:14px;margin-bottom:8px">⚠ Expired CSPs — Action Required</div>
         ${expiredCsps.map(t=>{
           const credit=(Number(t.premium)||0)*(Number(t.contracts)||1)*100;
@@ -542,6 +603,298 @@ function renderDashboard(c) {
 function setStartCash() {
   const v = Number(document.getElementById("startcash-inp")?.value);
   if (v >= 0) { state.cash = v; state.startCash = v; save(); render(); }
+}
+
+// ── ANALYTICS ─────────────────────────────────────────────────────────────────
+function renderAnalytics(c) {
+  const txs = state.transactions;
+  if (!txs.length) {
+    c.innerHTML=`<div class="empty"><div class="empty-icon">◎</div><div style="font-size:13px">No data yet</div><div style="font-size:11px;color:var(--dim);margin-top:6px">Add trades to see analytics</div></div>`;
+    return;
+  }
+
+  // ── Core computations ──────────────────────────────────────────────────────
+  const cash       = calcCash();
+  const eh         = getEnrichedHoldings();
+  const totMkt     = eh.reduce((s,h)=>s+h.marketValue,0);
+  const portVal    = totMkt + cash;
+  const startCash  = state.startCash || 0;
+
+  // First deposit date for annualized calc
+  const firstDeposit = [...txs].sort((a,b)=>new Date(a.date)-new Date(b.date))[0];
+  const daysSinceStart = firstDeposit
+    ? Math.max(1, (new Date()-new Date(firstDeposit.date+"T12:00:00"))/86400000)
+    : 1;
+  const yearsFrac = daysSinceStart / 365;
+
+  // Total invested (sum of all deposits)
+  const totalDeposited = txs.filter(t=>t.type==="deposit").reduce((s,t)=>s+(Number(t.amount)||0),0) + (state.startCash||0);
+  const totalWithdrawn = txs.filter(t=>t.type==="withdraw").reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const netDeposited   = totalDeposited - totalWithdrawn;
+
+  // Total P&L
+  const optPnL    = calcOptionPnL();
+  const {realized}= calcHoldings();
+  const totReal   = Object.values(realized).reduce((s,v)=>s+v,0)+optPnL;
+  const totUnreal = eh.reduce((s,h)=>s+h.unrealized,0);
+  const totPnL    = totReal + totUnreal;
+
+  // Annualized return
+  const annReturn = netDeposited > 0
+    ? (Math.pow(Math.max(0.001, portVal/netDeposited), 1/Math.max(yearsFrac,0.1))-1)*100
+    : 0;
+
+  // S&P annualized
+  const firstSnap = state.snapshots[0];
+  const lastSnap  = state.snapshots[state.snapshots.length-1];
+  const spyAnn    = firstSnap?.spyPrice && lastSnap?.spyPrice && firstSnap.date !== lastSnap.date
+    ? (Math.pow(lastSnap.spyPrice/firstSnap.spyPrice, 365/Math.max(1,daysSinceStart))-1)*100
+    : null;
+
+  // Premium collected (CSP opens + opt_sells)
+  const premiumCollected = txs
+    .filter(t=>t.type==="csp_open"||t.type==="opt_sell")
+    .reduce((s,t)=>(Number(t.premium)||0)*(Number(t.contracts)||1)*100+s, 0);
+  const premiumYTD = txs
+    .filter(t=>(t.type==="csp_open"||t.type==="opt_sell")&&t.date>=new Date().getFullYear()+"-01-01")
+    .reduce((s,t)=>(Number(t.premium)||0)*(Number(t.contracts)||1)*100+s, 0);
+
+  // Closed trades analysis
+  function closedTrades() {
+    const out = [];
+    // CSP trades
+    const cspOpens = {};
+    txs.filter(t=>t.type==="csp_open").forEach(t=>{cspOpens[t.id]=t;});
+    txs.filter(t=>t.type==="csp_close"&&t.linkedId).forEach(close=>{
+      const open=cspOpens[close.linkedId]; if(!open) return;
+      const credit=(Number(open.premium)||0)*(Number(open.contracts)||1)*100;
+      const debit=(Number(close.premium)||0)*(Number(close.contracts)||1)*100;
+      const pnl=credit-debit-(Number(close.fees)||0);
+      const daysHeld=Math.max(1,Math.ceil((new Date(close.date+"T12:00:00")-new Date(open.date+"T12:00:00"))/86400000));
+      out.push({type:"csp",ticker:open.ticker,pnl,credit,daysHeld,win:pnl>0,openDate:open.date,closeDate:close.date});
+    });
+    // Stock trades (FIFO pairs)
+    const stockBuys={};
+    [...txs].sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(tx=>{
+      if(tx.type==="buy"||tx.type==="csp_assigned"){
+        if(!stockBuys[tx.ticker]) stockBuys[tx.ticker]=[];
+        stockBuys[tx.ticker].push({...tx,qty:Number(tx.quantity)||0});
+      }
+      if(tx.type==="sell"&&stockBuys[tx.ticker]?.length){
+        let rem=Number(tx.quantity)||0, basis=0;
+        const openDate=stockBuys[tx.ticker][0].date;
+        while(rem>0&&stockBuys[tx.ticker].length){
+          const b=stockBuys[tx.ticker][0],used=Math.min(rem,b.qty);
+          basis+=used*(Number(b.price)||0); b.qty-=used; rem-=used;
+          if(b.qty===0) stockBuys[tx.ticker].shift();
+        }
+        const pnl=(Number(tx.price)||0)*(Number(tx.quantity)||0)-basis-(Number(tx.fees)||0);
+        const daysHeld=Math.max(1,Math.ceil((new Date(tx.date+"T12:00:00")-new Date(openDate+"T12:00:00"))/86400000));
+        out.push({type:"stock",ticker:tx.ticker,pnl,daysHeld,win:pnl>0,openDate,closeDate:tx.date});
+      }
+    });
+    // Option trades
+    const optOpens={};
+    txs.filter(t=>t.type==="opt_buy"||t.type==="opt_sell").forEach(t=>{optOpens[t.id]=t;});
+    txs.filter(t=>t.type==="opt_close"&&t.linkedId).forEach(close=>{
+      const open=optOpens[close.linkedId]; if(!open) return;
+      const openPx=(Number(open.premium)||0)*(Number(open.contracts)||1)*100;
+      const closePx=(Number(close.premium)||0)*(Number(close.contracts||open.contracts)||1)*100;
+      const pnl=open.type==="opt_buy"?closePx-openPx-Number(close.fees||0):openPx-closePx-Number(close.fees||0);
+      const daysHeld=Math.max(1,Math.ceil((new Date(close.date+"T12:00:00")-new Date(open.date+"T12:00:00"))/86400000));
+      out.push({type:"option",ticker:open.ticker,pnl,daysHeld,win:pnl>0,openDate:open.date,closeDate:close.date});
+    });
+    return out;
+  }
+
+  const trades = closedTrades();
+  const cspTrades    = trades.filter(t=>t.type==="csp");
+  const stockTrades  = trades.filter(t=>t.type==="stock");
+  const optTrades    = trades.filter(t=>t.type==="option");
+  const allClosed    = trades;
+
+  const winRate = t => t.length ? Math.round(t.filter(x=>x.win).length/t.length*100) : null;
+  const avgDays = t => t.length ? Math.round(t.reduce((s,x)=>s+x.daysHeld,0)/t.length) : null;
+  const avgPnL  = t => t.length ? t.reduce((s,x)=>s+x.pnl,0)/t.length : null;
+  const bestTrade  = allClosed.length ? allClosed.reduce((a,b)=>a.pnl>b.pnl?a:b) : null;
+  const worstTrade = allClosed.length ? allClosed.reduce((a,b)=>a.pnl<b.pnl?a:b) : null;
+
+  // Buying power used
+  const closedCspIds = new Set(txs.filter(t=>t.type==="csp_close"&&t.linkedId).map(t=>t.linkedId));
+  const openCsps = txs.filter(t=>t.type==="csp_open"&&!closedCspIds.has(t.id));
+  const collateralUsed = openCsps.reduce((s,t)=>(Number(t.strike)||0)*(Number(t.contracts)||1)*100+s,0);
+  const buyingPowerPct = portVal>0 ? collateralUsed/portVal*100 : 0;
+
+  // Max drawdown from snapshots
+  let maxDD = 0, peak = 0;
+  state.snapshots.forEach(s=>{
+    if(s.portfolioValue>peak) peak=s.portfolioValue;
+    if(peak>0) maxDD=Math.max(maxDD,(peak-s.portfolioValue)/peak*100);
+  });
+
+  // Monthly P&L calendar
+  function monthlyPnL() {
+    const map={};
+    // Assign each closed trade's P&L to its close month
+    trades.forEach(t=>{
+      const key=t.closeDate?.slice(0,7);
+      if(!key) return;
+      map[key]=(map[key]||0)+t.pnl;
+    });
+    // Also add dividends by month
+    txs.filter(t=>t.type==="dividend").forEach(t=>{
+      const key=t.date?.slice(0,7);
+      if(!key) return;
+      map[key]=(map[key]||0)+(Number(t.amount)||0);
+    });
+    return map;
+  }
+  const monthMap = monthlyPnL();
+  const monthKeys = Object.keys(monthMap).sort();
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  const wr_all   = winRate(allClosed);
+  const wr_csp   = winRate(cspTrades);
+  const wr_stock = winRate(stockTrades);
+  const wr_opt   = winRate(optTrades);
+
+  c.innerHTML = `<div style="animation:fadeUp .2s ease;padding-bottom:20px">
+
+    <!-- RETURNS -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-title" style="color:var(--green)">Returns</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Total P&L</div>
+          <div style="font-size:22px;font-weight:900;color:${totPnL>=0?"var(--green)":"var(--red)"}">${totPnL>=0?"+":""}${dollar(totPnL)}</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Annualized Return</div>
+          <div style="font-size:22px;font-weight:900;color:${annReturn>=0?"var(--green)":"var(--red)"}">${annReturn.toFixed(1)}%</div>
+        </div>
+      </div>
+      ${spyAnn!==null?`
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div class="ring-wrap"><div class="ring-val" style="color:${annReturn>=0?"var(--green)":"var(--red)"}">${annReturn.toFixed(1)}%</div><div class="ring-lbl">You (ann.)</div></div>
+          <div class="ring-wrap"><div class="ring-val" style="color:${spyAnn>=0?"var(--blue)":"var(--red)"}">${spyAnn.toFixed(1)}%</div><div class="ring-lbl">S&P (ann.)</div></div>
+          <div class="ring-wrap"><div class="ring-val" style="color:${(annReturn-spyAnn)>=0?"var(--green)":"var(--red)"}">${(annReturn-spyAnn)>=0?"+":""}${(annReturn-spyAnn).toFixed(1)}%</div><div class="ring-lbl">Alpha</div></div>
+        </div>
+      </div>`:""}
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div class="metric-row" style="border:none;padding:0"><span class="metric-label">Net Deposited</span><span class="metric-val">${dollar(netDeposited)}</span></div>
+        <div class="metric-row" style="border:none;padding:0"><span class="metric-label">Portfolio Value</span><span class="metric-val">${dollar(portVal)}</span></div>
+        <div class="metric-row" style="border:none;padding:0"><span class="metric-label">Realized P&L</span><span class="metric-val" style="color:${totReal>=0?"var(--green)":"var(--red)"}">${totReal>=0?"+":""}${dollar(totReal)}</span></div>
+        <div class="metric-row" style="border:none;padding:0"><span class="metric-label">Unrealized P&L</span><span class="metric-val" style="color:${totUnreal>=0?"var(--green)":"var(--red)"}">${totUnreal>=0?"+":""}${dollar(totUnreal)}</span></div>
+      </div>
+    </div>
+
+    <!-- RISK -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-title" style="color:var(--red)">Risk Metrics</div>
+      <div class="metric-row"><span class="metric-label">Max Drawdown (snapshots)</span><span class="metric-val" style="color:${maxDD>15?"var(--red)":maxDD>8?"var(--yellow)":"var(--green)"}">-${maxDD.toFixed(1)}%</span></div>
+      <div class="metric-row"><span class="metric-label">Collateral Deployed</span><span class="metric-val">${dollar(collateralUsed)}</span></div>
+      <div class="metric-row"><span class="metric-label">Buying Power Used</span><span class="metric-val" style="color:${buyingPowerPct>40?"var(--red)":buyingPowerPct>25?"var(--yellow)":"var(--green)"}">${buyingPowerPct.toFixed(1)}%</span></div>
+      <div class="metric-row"><span class="metric-label">Tracking Since</span><span class="metric-val">${firstDeposit?fmtDate(firstDeposit.date):"—"} (${Math.round(daysSinceStart)}d)</span></div>
+    </div>
+
+    <!-- WIN RATES -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-title" style="color:var(--blue)">Win Rate by Strategy</div>
+      ${[
+        ["All Trades",    wr_all,   allClosed.length],
+        ["CSPs",          wr_csp,   cspTrades.length],
+        ["Stocks",        wr_stock, stockTrades.length],
+        ["Options",       wr_opt,   optTrades.length],
+      ].map(([label,wr,n])=> wr===null ? `` : `
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:12px;color:var(--muted)">${label}</span>
+            <span style="font-size:13px;font-weight:800;color:${wr>=70?"var(--green)":wr>=50?"var(--yellow)":"var(--red)"}">${wr}% <span style="font-size:10px;font-weight:400;color:var(--dim)">(${n} trades)</span></span>
+          </div>
+          <div class="wr-bar">
+            <div style="width:${wr}%;background:${wr>=70?"var(--green)":wr>=50?"var(--yellow)":"var(--red)"}"></div>
+            <div style="flex:1;background:var(--border)"></div>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+
+    <!-- TRADE STATS -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-title" style="color:var(--yellow)">Trade Statistics</div>
+      <div class="metric-row"><span class="metric-label">Total Closed Trades</span><span class="metric-val">${allClosed.length}</span></div>
+      <div class="metric-row"><span class="metric-label">Avg P&L per Trade</span><span class="metric-val" style="color:${(avgPnL(allClosed)||0)>=0?"var(--green)":"var(--red)"}">${avgPnL(allClosed)!==null?(avgPnL(allClosed)>=0?"+":"")+dollar(avgPnL(allClosed)):"—"}</span></div>
+      <div class="metric-row"><span class="metric-label">Avg Days Held (all)</span><span class="metric-val">${avgDays(allClosed)!==null?avgDays(allClosed)+"d":"—"}</span></div>
+      <div class="metric-row"><span class="metric-label">Avg Days Held (CSPs)</span><span class="metric-val">${avgDays(cspTrades)!==null?avgDays(cspTrades)+"d":"—"}</span></div>
+      <div class="metric-row"><span class="metric-label">Avg P&L per CSP</span><span class="metric-val" style="color:${(avgPnL(cspTrades)||0)>=0?"var(--green)":"var(--red)"}">${avgPnL(cspTrades)!==null?(avgPnL(cspTrades)>=0?"+":"")+dollar(avgPnL(cspTrades)):"—"}</span></div>
+      ${bestTrade?`<div class="metric-row"><span class="metric-label">Best Trade</span><span class="metric-val" style="color:var(--green)">${bestTrade.ticker} +${dollar(bestTrade.pnl)}</span></div>`:""}
+      ${worstTrade?`<div class="metric-row" style="border:none"><span class="metric-label">Worst Trade</span><span class="metric-val" style="color:var(--red)">${worstTrade.ticker} ${dollar(worstTrade.pnl)}</span></div>`:""}
+    </div>
+
+    <!-- PREMIUM / INCOME -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-title" style="color:var(--purple)">Premium Income</div>
+      <div class="metric-row"><span class="metric-label">Total Premium Collected</span><span class="metric-val" style="color:var(--yellow)">${dollar(premiumCollected)}</span></div>
+      <div class="metric-row"><span class="metric-label">Premium YTD (${new Date().getFullYear()})</span><span class="metric-val" style="color:var(--yellow)">${dollar(premiumYTD)}</span></div>
+      <div class="metric-row"><span class="metric-label">Dividends Received</span><span class="metric-val" style="color:var(--green)">${dollar(txs.filter(t=>t.type==="dividend").reduce((s,t)=>s+(Number(t.amount)||0),0))}</span></div>
+      <div class="metric-row" style="border:none"><span class="metric-label">Total Income (prem + div)</span><span class="metric-val" style="color:var(--green)">${dollar(premiumCollected + txs.filter(t=>t.type==="dividend").reduce((s,t)=>s+(Number(t.amount)||0),0))}</span></div>
+    </div>
+
+    <!-- MONTHLY P&L CALENDAR -->
+    ${monthKeys.length>0?`
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-title" style="color:var(--orange)">Monthly P&L Calendar</div>
+      <div style="overflow-x:auto">
+        <div style="min-width:280px">
+          ${monthKeys.length>0?`
+          <div style="display:grid;grid-template-columns:repeat(${Math.min(monthKeys.length,6)},1fr);gap:4px;margin-bottom:8px">
+            ${monthKeys.slice(-12).map(k=>{
+              const v=monthMap[k];
+              const maxAbs=Math.max(...Object.values(monthMap).map(Math.abs),1);
+              const intensity=Math.round(Math.abs(v)/maxAbs*90)+10;
+              const bg=v>=0?`rgba(0,232,122,${intensity/100*0.7})`:`rgba(255,68,85,${intensity/100*0.7})`;
+              const [yr,mo]=k.split("-");
+              const moName=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(mo)-1];
+              return `<div style="background:${bg};border-radius:6px;padding:6px 4px;text-align:center">
+                <div style="font-size:9px;color:var(--bright);opacity:.7">${moName} ${yr.slice(2)}</div>
+                <div style="font-size:11px;font-weight:800;color:var(--bright);margin-top:2px">${v>=0?"+":""}${v>=1000?(v/1000).toFixed(1)+"k":v.toFixed(0)}</div>
+              </div>`;
+            }).join("")}
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted)">
+            <span>Best month: <strong style="color:var(--green)">${monthKeys.length?dollar(Math.max(...Object.values(monthMap))):"-"}</strong></span>
+            <span>Worst month: <strong style="color:var(--red)">${monthKeys.length?dollar(Math.min(...Object.values(monthMap))):"-"}</strong></span>
+          </div>
+          `:""
+          }
+        </div>
+      </div>
+    </div>
+    `:""}
+
+    <!-- TRADE BREAKDOWN TABLE -->
+    ${allClosed.length>0?`
+    <div class="card">
+      <div class="card-title" style="color:var(--muted)">All Closed Trades</div>
+      <div style="max-height:280px;overflow-y:auto">
+        <div style="display:grid;grid-template-columns:50px 1fr 60px 50px 50px;gap:6px;font-size:9px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;padding:4px 0;margin-bottom:4px;border-bottom:1px solid var(--border)">
+          <span>Type</span><span>Ticker</span><span>P&L</span><span>Days</span><span>Result</span>
+        </div>
+        ${[...allClosed].sort((a,b)=>new Date(b.closeDate)-new Date(a.closeDate)).slice(0,50).map(t=>`
+          <div style="display:grid;grid-template-columns:50px 1fr 60px 50px 50px;gap:6px;font-size:11px;padding:5px 0;border-bottom:1px solid var(--border);align-items:center">
+            <span style="color:${t.type==="csp"?"var(--yellow)":t.type==="stock"?"var(--blue)":"var(--purple)"};font-weight:700;font-size:10px">${t.type.toUpperCase()}</span>
+            <span style="color:var(--bright);font-weight:600">${t.ticker}</span>
+            <span style="color:${t.pnl>=0?"var(--green)":"var(--red)"};font-weight:700">${t.pnl>=0?"+":""}${dollar(t.pnl)}</span>
+            <span style="color:var(--muted)">${t.daysHeld}d</span>
+            <span style="color:${t.win?"var(--green)":"var(--red)"}">${t.win?"W":"L"}</span>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+    `:""}
+
+  </div>`;
 }
 
 // ── CHART ─────────────────────────────────────────────────────────────────────
@@ -635,12 +988,22 @@ function renderHistory(c) {
     buy:{label:"Buy",color:"var(--green)",icon:"▲"}, sell:{label:"Sell",color:"var(--red)",icon:"▼"},
     csp_open:{label:"CSP Open",color:"var(--yellow)",icon:"◈"}, csp_close:{label:"CSP Close",color:"var(--yellow)",icon:"◎"},
     csp_assigned:{label:"Assigned",color:"var(--purple)",icon:"→"},
+    opt_buy:{label:"Buy Option",color:"var(--blue)",icon:"▲◎"}, 
+    opt_sell:{label:"Sell Option",color:"var(--orange)",icon:"▼◎"},
+    opt_close:{label:"Close Option",color:"var(--blue)",icon:"◎"},
     deposit:{label:"Deposit",color:"var(--blue)",icon:"+"}, withdraw:{label:"Withdraw",color:"var(--orange)",icon:"−"},
     dividend:{label:"Dividend",color:"var(--green)",icon:"$"},
   };
-  const filters = [["all","All"],["buy","Buys"],["sell","Sells"],["csp_open","CSPs"],["deposit","Cash"]];
+  const filters = [["all","All"],["buy","Stocks"],["csp_open","CSPs"],["opt_buy","Options"],["deposit","Cash"]];
   const sorted = [...state.transactions].sort((a,b)=>new Date(b.date)-new Date(a.date))
-    .filter(t=>state.histFilter==="all"||t.type===state.histFilter||(state.histFilter==="deposit"&&(t.type==="deposit"||t.type==="withdraw"||t.type==="dividend")));
+    .filter(t=>{
+      if(state.histFilter==="all") return true;
+      if(state.histFilter==="buy") return t.type==="buy"||t.type==="sell";
+      if(state.histFilter==="csp_open") return t.type==="csp_open"||t.type==="csp_close"||t.type==="csp_assigned";
+      if(state.histFilter==="opt_buy") return t.type==="opt_buy"||t.type==="opt_sell"||t.type==="opt_close";
+      if(state.histFilter==="deposit") return t.type==="deposit"||t.type==="withdraw"||t.type==="dividend";
+      return t.type===state.histFilter;
+    });
 
   const csvBtn=`onclick="exportCSV()"`;
   const jsonBtn=`onclick="exportJSON()"`;
@@ -685,9 +1048,13 @@ function renderHistory(c) {
       ${sorted.length===0?`<div class="empty"><div class="empty-icon">≡</div><div>No transactions yet</div></div>`:""}
       ${sorted.map(tx=>{
         const meta=TYPE_META[tx.type]||{label:tx.type,color:"var(--muted)",icon:"·"};
+        const isOpt = tx.type==="opt_buy"||tx.type==="opt_sell"||tx.type==="opt_close";
         const amt=tx.type==="buy"||tx.type==="sell"?(Number(tx.quantity)||0)*(Number(tx.price)||0)
-          :tx.type==="csp_open"||tx.type==="csp_close"?(Number(tx.premium)||0)*(Number(tx.contracts)||1)*100
+          :tx.type==="csp_open"||tx.type==="csp_close"||(isOpt&&tx.type!=="opt_close")?(Number(tx.premium)||0)*(Number(tx.contracts)||1)*100
+          :tx.type==="opt_close"?(Number(tx.premium)||0)*(Number(tx.contracts)||1)*100
           :Number(tx.amount)||0;
+        const optLabel = isOpt&&tx.optionType ? ` ${tx.ticker} $${tx.strike} ${tx.optionType.charAt(0).toUpperCase()+tx.optionType.slice(1)}` : "";
+        const cspLabel = (tx.type==="csp_open"||tx.type==="csp_close")?" $"+tx.strike+" Put":"";
         const expanded=state.expandedTx===tx.id;
         return `<div class="tx-row" onclick="toggleTx('${tx.id}')">
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -696,7 +1063,7 @@ function renderHistory(c) {
               <div>
                 <div style="font-size:12px;font-weight:700;color:var(--bright)">
                   <span style="color:${meta.color};margin-right:6px">${meta.label}</span>
-                  ${tx.ticker||""}${tx.type==="csp_open"||tx.type==="csp_close"?" $"+tx.strike+" Put":""}
+                  ${tx.ticker&&!optLabel?tx.ticker:""}${cspLabel}${optLabel}
                 </div>
                 <div style="font-size:10px;color:var(--muted)">${fmtDate(tx.date)}</div>
               </div>
@@ -725,11 +1092,12 @@ function deleteTx(id) { if(confirm("Delete this transaction?")) { state.transact
 const TX_TYPES = [
   {id:"buy",label:"Buy Stock"},{id:"sell",label:"Sell Stock"},
   {id:"csp_open",label:"Open CSP"},{id:"csp_close",label:"Close CSP"},
+  {id:"opt_buy",label:"Buy Option"},{id:"opt_sell",label:"Sell Option"},{id:"opt_close",label:"Close Option"},
   {id:"deposit",label:"Deposit"},{id:"withdraw",label:"Withdraw"},{id:"dividend",label:"Dividend"},
 ];
 
 function showForm(type) {
-  activeForm = { type, date:today(), ticker:"", quantity:"", price:"", premium:"", contracts:"1",
+  activeForm = { type, date:today(), ticker:"", optionType:"call", quantity:"", price:"", premium:"", contracts:"1",
     strike:"", expiration:"", fees:"", amount:"", notes:"", linkedId:"" };
   document.getElementById("content").style.display="none";
   document.getElementById("form-panel").style.display="block";
@@ -742,12 +1110,6 @@ function closeForm() {
   document.getElementById("content").style.display="block";
 }
 
-function closeForm() {
-  activeForm=null;
-  document.getElementById("form-panel").style.display="none";
-  document.getElementById("content").style.display="";
-}
-
 function renderForm() {
   if (!activeForm) return;
   const t = activeForm.type;
@@ -756,6 +1118,10 @@ function renderForm() {
   document.getElementById("type-row").innerHTML = TX_TYPES.map(ty=>
     `<button class="type-btn ${t===ty.id?"active":""}" onclick="switchType('${ty.id}')">${ty.label}</button>`
   ).join("");
+
+  // Open options for linking (opt_buy and opt_sell not yet closed)
+  const closedOptIds = new Set(state.transactions.filter(tx=>tx.type==="opt_close"&&tx.linkedId).map(tx=>tx.linkedId));
+  const openOpts = state.transactions.filter(tx=>(tx.type==="opt_buy"||tx.type==="opt_sell")&&!closedOptIds.has(tx.id));
 
   // Open CSPs for linking
   const closedIds = new Set(state.transactions.filter(tx=>tx.type==="csp_close"&&tx.linkedId).map(tx=>tx.linkedId));
@@ -795,7 +1161,54 @@ function renderForm() {
       <div class="field full"><label>Close price per share $</label><input id="f-premium" class="inp" type="number" step="0.01" placeholder="1.55" value="${activeForm.premium}" oninput="activeForm.premium=this.value;updatePnlPreview()"></div>
     `;
   }
-  if (t==="deposit"||t==="withdraw"||t==="dividend") {
+  if (t==="opt_buy"||t==="opt_sell") {
+    const dir = t==="opt_buy" ? "Buy (debit — you pay premium)" : "Sell (credit — you collect premium)";
+    fields += `
+      <div class="field full"><label>Direction</label>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-size:12px;color:${t==="opt_buy"?"var(--blue)":"var(--yellow)"}">
+          ${t==="opt_buy"?"▲ Buying — you pay debit. Max loss = premium paid.":"▼ Selling — you collect credit. Covered call or short put."}
+        </div>
+      </div>
+      <div class="field"><label>Ticker</label><input id="f-ticker" class="inp" placeholder="AAPL" value="${activeForm.ticker}" style="text-transform:uppercase"></div>
+      <div class="field"><label>Call or Put</label>
+        <select id="f-optionType" class="inp inp-sel">
+          <option value="call" ${activeForm.optionType==="call"?"selected":""}>Call</option>
+          <option value="put"  ${activeForm.optionType==="put" ?"selected":""}>Put</option>
+        </select>
+      </div>
+      <div class="field"><label>Strike $</label><input id="f-strike" class="inp" type="number" placeholder="175" value="${activeForm.strike}"></div>
+      <div class="field"><label>Expiration</label><input id="f-expiration" class="inp" type="date" value="${activeForm.expiration}"></div>
+      <div class="field"><label>Contracts</label><input id="f-contracts" class="inp" type="number" min="1" value="${activeForm.contracts||1}"></div>
+      <div class="field"><label>Premium per share $</label><input id="f-premium" class="inp" type="number" step="0.01" placeholder="3.10" value="${activeForm.premium}"></div>
+    `;
+  }
+  if (t==="opt_close") {
+    const optList = openOpts.map(o=>`<option value="${o.id}" ${activeForm.linkedId===o.id?"selected":""}>${o.type==="opt_buy"?"▲":"▼"} ${o.ticker} $${o.strike} ${o.optionType||"?"} · ${o.contracts}ct · exp ${fmtDate(o.expiration)}</option>`).join("");
+    fields += `
+      <div class="field full"><label>Option to Close</label>
+        <select class="inp inp-sel" oninput="linkOpt(this.value)">
+          <option value="">Select open option...</option>${optList}
+        </select>
+      </div>
+      <div class="field full"><label>Close price per share $</label><input id="f-premium" class="inp" type="number" step="0.01" placeholder="1.80" value="${activeForm.premium}" oninput="activeForm.premium=this.value;updatePnlPreview()"></div>
+    `;
+    // P&L preview for closing options
+    if (activeForm.linkedId && activeForm.premium) {
+      const orig = openOpts.find(o=>o.id===activeForm.linkedId);
+      if (orig) {
+        const openPx  = Number(orig.premium)||0;
+        const closePx = Number(activeForm.premium)||0;
+        const conts   = Number(orig.contracts)||1;
+        const pnl = orig.type==="opt_buy"
+          ? (closePx - openPx) * conts * 100   // bought: profit if close > open
+          : (openPx - closePx) * conts * 100;  // sold: profit if close < open
+        fields += `<div class="field full"><div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:4px">P&L Preview</div>
+          <div style="font-size:20px;font-weight:800;color:${pnl>=0?"var(--green)":"var(--red)"}">${pnl>=0?"+":""}${dollar(pnl)}</div>
+        </div></div>`;
+      }
+    }
+  }
     if (t==="dividend") fields += `<div class="field"><label>Ticker</label><input id="f-ticker" class="inp" placeholder="AAPL" value="${activeForm.ticker}" style="text-transform:uppercase"></div>`;
     fields += `<div class="field ${t==="dividend"?"":"full"}"><label>Amount $</label><input id="f-amount" class="inp" type="number" step="0.01" placeholder="1000" value="${activeForm.amount}"></div>`;
   }
@@ -814,7 +1227,11 @@ function linkCsp(id) {
   if(o){activeForm.linkedId=id;activeForm.ticker=o.ticker;activeForm.contracts=o.contracts;activeForm.strike=o.strike;}
   updatePnlPreview();
 }
-function updatePnlPreview() {
+function linkOpt(id) {
+  const o=state.transactions.find(t=>t.id===id);
+  if(o){activeForm.linkedId=id;activeForm.contracts=o.contracts;activeForm.ticker=o.ticker;}
+  renderForm();
+}
   const el=document.getElementById("pnl-preview"); if(!el) return;
   if(activeForm?.type==="csp_close"&&activeForm.linkedId&&activeForm.premium) {
     const open=state.transactions.find(t=>t.id===activeForm.linkedId);
@@ -872,6 +1289,7 @@ function saveTx() {
 
   // Read all values fresh from DOM at save time (more reliable than oninput on iOS)
   const getVal = id => document.getElementById(id)?.value || "";
+  if (document.getElementById("f-optionType")) activeForm.optionType = document.getElementById("f-optionType").value;
   if (document.getElementById("f-date"))       activeForm.date       = getVal("f-date");
   if (document.getElementById("f-ticker"))     activeForm.ticker     = getVal("f-ticker").toUpperCase();
   if (document.getElementById("f-quantity"))   activeForm.quantity   = getVal("f-quantity");
@@ -887,6 +1305,8 @@ function saveTx() {
   if ((t==="buy"||t==="sell")&&(!activeForm.ticker||!activeForm.quantity||!activeForm.price)) return alert("Fill in ticker, shares and price.");
   if (t==="csp_open"&&(!activeForm.ticker||!activeForm.strike||!activeForm.premium||!activeForm.expiration)) return alert("Fill in all CSP fields.");
   if (t==="csp_close"&&(!activeForm.linkedId||!activeForm.premium)) return alert("Select an open CSP and enter close price.");
+  if ((t==="opt_buy"||t==="opt_sell")&&(!activeForm.ticker||!activeForm.strike||!activeForm.premium||!activeForm.expiration)) return alert("Fill in ticker, strike, expiration and premium.");
+  if (t==="opt_close"&&(!activeForm.linkedId||!activeForm.premium)) return alert("Select an open option and enter close price.");
   if ((t==="deposit"||t==="withdraw"||t==="dividend")&&!activeForm.amount) return alert("Enter an amount.");
 
   const tx = {...activeForm, id:uid(), createdAt:nowTs()};
