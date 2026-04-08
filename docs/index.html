@@ -229,16 +229,16 @@
     <div id="csp-results"    style="display:none"></div>
     <div id="csp-loading"    style="display:none;text-align:center;padding:48px 20px">
       <div class="spinner"></div>
-      <div class="load-title">Scanning put opportunities...</div>
+      <div class="load-title" id="csp-load-title">Pre-filtering 500+ tickers...</div>
       <div id="csp-progress-wrap" style="display:none">
         <div id="progress-track"><div id="csp-progress-bar" style="height:100%;background:linear-gradient(90deg,var(--yellow),var(--blue));border-radius:6px;width:0%;transition:width .5s ease"></div></div>
         <div id="csp-progress-label" style="font-size:11px;color:var(--muted);text-align:center;margin-top:4px"></div>
       </div>
-      <div class="load-step">&rsaquo; Fetching options chains for quality large-caps</div>
-      <div class="load-step">&rsaquo; Calculating IV rank &amp; IV/RV ratios</div>
-      <div class="load-step">&rsaquo; Finding ~30-delta put strikes (30-50 DTE)</div>
-      <div class="load-step">&rsaquo; Checking for upcoming earnings conflicts</div>
-      <div class="load-step">&rsaquo; Rating setups: STRONG / DECENT / SKIP</div>
+      <div class="load-step">&rsaquo; Stage 1: Price + volume pre-filter (500+ tickers, ~60s)</div>
+      <div class="load-step">&rsaquo; Stage 2: Options chains on tickers that pass (varies)</div>
+      <div class="load-step">&rsaquo; Calculating IV rank, 30-delta strike, premium estimates</div>
+      <div class="load-step">&rsaquo; Checking earnings conflicts, spread quality</div>
+      <div class="load-step">&rsaquo; Rating STRONG / DECENT / SKIP — results stream in live</div>
     </div>
     <div id="csp-error"      style="display:none"></div>
     <div id="csp-status-bar" style="display:none;text-align:center;font-size:10px;color:var(--dim);margin-top:12px;line-height:1.7"></div>
@@ -526,7 +526,10 @@
         if (p.total > 0) {
           document.getElementById("csp-progress-wrap").style.display = "";
           document.getElementById("csp-progress-bar").style.width = p.pct + "%";
-          document.getElementById("csp-progress-label").textContent = p.done + " / " + p.total + " tickers (" + p.pct + "%)";
+          document.getElementById("csp-progress-label").textContent =
+            p.done + " / " + p.total + " tickers (" + p.pct + "%)";
+          const titleEl = document.getElementById("csp-load-title");
+          if (titleEl) titleEl.textContent = p.phaseLabel || "Scanning...";
         }
       } catch(e) {}
     }, 2000);
