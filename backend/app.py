@@ -49,32 +49,108 @@ _csp_cache = {
     "running": False, "progress": {"done":0,"total":0,"phase":"idle"},
 }
 
-# Layer 2 universe — quality stocks with liquid options
+# Layer 2 universe — 500+ tickers across all S&P 500 sectors + ETFs + high-vol
 CSP_UNIVERSE = [
-    # Mega-cap tech
-    "AAPL","MSFT","GOOGL","AMZN","META","NVDA","TSLA","AMD","ORCL","ADBE",
-    "CRM","NOW","INTU","PANW","CRWD","NET","DDOG","SNOW","MDB","PLTR",
-    "INTC","QCOM","TXN","AVGO","ARM","AMAT","LRCX","MU","SMCI","ON",
-    # Financials
-    "JPM","BAC","GS","MS","WFC","C","BLK","SCHW","V","MA","AXP","PYPL","COIN","SOFI",
-    # Healthcare
-    "UNH","LLY","JNJ","ABBV","MRK","PFE","AMGN","GILD","VRTX","REGN","ISRG","MRNA",
-    # Consumer
-    "AMZN","WMT","COST","HD","TGT","MCD","SBUX","NKE","BKNG","ABNB","UBER","DASH",
-    # Industrials / Energy
-    "XOM","CVX","COP","OXY","SLB","BA","CAT","GE","HON","RTX","LMT","UPS","FDX",
-    # Media / Entertainment
-    "NFLX","DIS","SPOT","SNAP","PINS","RBLX",
-    # Other quality large-caps
-    "BRK-B","PG","KO","PEP","WBA","T","VZ","IBM","DELL","HPQ",
-    # High-vol / momentum (premium-rich)
-    "MSTR","COIN","HOOD","RIVN","NIO","GME","MARA","RIOT",
-    # ETFs (liquid, tight spreads)
-    "SPY","QQQ","IWM","DIA","GLD","SLV","TLT","HYG","XLE","XLF","XLK","XLV","XLI",
-    "SMH","ARKK","SOXX","IBB","GDX","USO",
+    # ── Mega-cap tech ───────────────────────────────────────────────────────
+    "AAPL","MSFT","NVDA","GOOGL","GOOG","AMZN","META","TSLA","AVGO","ORCL",
+    "AMD","ADBE","CRM","INTU","NOW","PANW","CRWD","NET","DDOG","SNOW",
+    "MDB","PLTR","FTNT","ZBRA","CDNS","SNPS","ANSS","EPAM","PAYC","WDAY",
+    "ZS","OKTA","HUBS","TWLO","DOCN","CFLT","ESTC","GTLB","PATH","AI",
+    "INTC","QCOM","TXN","AVGO","AMAT","LRCX","KLAC","MCHP","ADI","MRVL",
+    "MU","WDC","STX","NTAP","HPE","DELL","HPQ","PSTG","SMCI","ARM","ON",
+    "AAPL","MSFT","CSCO","IBM","GLW","FFIV","JNPR","AKAM","CTSH","ACN",
+    "IT","EPAM","LDOS","BAH","SAIC","CACI","VRSK","NLOK","GEN","CYBR",
+    # ── Financials ──────────────────────────────────────────────────────────
+    "JPM","BAC","WFC","GS","MS","C","USB","TFC","PNC","FITB",
+    "HBAN","RF","CFG","KEY","MTB","ZION","CMA","FHN","ALLY","SYF",
+    "COF","DFS","AXP","V","MA","PYPL","SQ","AFRM","UPST","LC",
+    "BLK","BX","KKR","APO","ARES","CG","TPG","BAM","IVZ","AMG",
+    "SCHW","ETFC","IBKR","HOOD","COIN","MSTR","MARA","RIOT","HUT","BTBT",
+    "MET","PRU","AIG","ALL","TRV","CB","PGR","HIG","AFL","GL",
+    "BRK-B","LNC","FNF","FAF","CINF","RNR","AXS","RE","WRB","MKL",
+    "ICE","CME","CBOE","NDAQ","MKTX","MSCI","MCO","SPGI","FDS","INFO",
+    # ── Healthcare ──────────────────────────────────────────────────────────
+    "UNH","CVS","CI","ELV","HUM","CNC","MOH","OSCR",
+    "JNJ","PFE","MRK","ABBV","BMY","AZN","LLY","NVO","RHHBY",
+    "AMGN","GILD","BIIB","REGN","VRTX","SGEN","ALXN","INCY","EXEL","IONS",
+    "ISRG","SYK","MDT","BSX","EW","ZBH","HOLX","ICLR","MEDP",
+    "TMO","DHR","A","BIO","WAT","IDXX","VEEV","PHG","MTD","TER",
+    "CVS","ESRX","MCK","ABC","CAH","PDCO","HSIC",
+    "MRNA","BNTX","NVAX","SANOFI","ARCT","RVMD","KYMR",
+    # ── Consumer Discretionary ──────────────────────────────────────────────
+    "AMZN","TSLA","HD","LOW","TGT","WMT","COST","BJ","DG","DLTR",
+    "MCD","SBUX","CMG","YUM","QSR","DPZ","WEN","JACK","DENN",
+    "NKE","LULU","UAA","PVH","HBI","GOOS","SKX","DECK","ONON","CROX",
+    "BKNG","EXPE","ABNB","TRIP","LYFT","UBER","DASH","GRUB",
+    "DIS","NFLX","PARA","WBD","LYV","MSGS","RBLX","U","TTWO","EA","ATVI",
+    "GM","F","STLA","TM","HMC","RIVN","LCID","NIO","LI","XPEV","FSR",
+    "PTON","NWSA","NYT","SBAC","AMC","CNK","IMAX","RRR","PENN","DKNG","MGM","WYNN",
+    "W","ETSY","EBAY","WISH","CHWY","CHEGG","COUR",
+    "ANF","AEO","GPS","URBN","ROST","TJX","BURL","M","KSS","JWN",
+    # ── Consumer Staples ────────────────────────────────────────────────────
+    "PG","KO","PEP","PM","MO","MDLZ","KHC","GIS","CPB","SJM",
+    "CL","CHD","COTY","EL","KVUE","ULTA","BBWI","BF-B",
+    "KMB","CLX","RBGLY","RL","HELE","SPB",
+    "WBA","CVS","RAD","WDFC","CENT","SYY","US","PFGC",
+    "TSN","HRL","SFM","COTY","POST","MKC","THS",
+    # ── Energy ──────────────────────────────────────────────────────────────
+    "XOM","CVX","COP","EOG","PXD","DVN","FANG","MRO","APA","OVV",
+    "OXY","HES","VLO","PSX","MPC","DK","PBF","PARR",
+    "SLB","HAL","BKR","NOV","WHD","LBRT","PTEN",
+    "KMI","WMB","OKE","ET","MMP","EPD","LNG","CTRA","AR","EQT",
+    "BP","SHEL","TTE","ENB","SU","CNQ","CVE","IMO",
+    # ── Industrials ─────────────────────────────────────────────────────────
+    "GE","HON","MMM","CAT","DE","EMR","ETN","PH","ROK","GNRC",
+    "RTX","LMT","GD","NOC","BA","HII","LHX","TDG","HEI","KTOS",
+    "UPS","FDX","JBHT","XPO","CHRW","ODFL","SAIA","WERN","KNX",
+    "CSX","UNP","NSC","CP","CNI","WAB","TRN",
+    "WM","RSG","CWST","SRCL","CLH",
+    "FAST","GWW","MSC","AIT","DNOW","HDS","WESCO","SITE",
+    "IR","OTIS","CARR","TT","LII","AAON","WSO",
+    "AME","IDEX","ROP","FTV","NDSN","AXTA","PPG","SHW","RPM",
+    "ITW","DOV","XYL","GXO","RXO","SAIA","HUBG",
+    # ── Materials ───────────────────────────────────────────────────────────
+    "LIN","APD","AIR","CF","MOS","NTR","FMC","ICL","OLN",
+    "FCX","NEM","GOLD","AEM","KGC","EGO","IAG","AU","WPM","PAAS",
+    "NUE","STLD","RS","CMC","MT","CLF","X","ATI",
+    "DD","DOW","LYB","AVNT","EMN","ALB","LTHM","PLL","MP","ENPH",
+    "BLL","CCK","PKG","IP","WRK","SON","SLGN",
+    # ── Real Estate ─────────────────────────────────────────────────────────
+    "AMT","CCI","EQIX","SBAC","DLR","IRM","QTS","CONE",
+    "SPG","O","VICI","GLPI","MGP","BXP","SLG","ARE","EQR","AVB",
+    "PLD","PSA","EXR","CUBE","LSI","NSA","REXR",
+    "WELL","VTR","OHI","HR","DOC","PEAK","SBRA","CTRE",
+    # ── Utilities ───────────────────────────────────────────────────────────
+    "NEE","DUK","SO","D","AEP","EXC","XEL","WEC","ES","ETR",
+    "PCG","EIX","PPL","CMS","NI","PNW","EVRG","IDACORP",
+    "AWK","WTR","YORW","MSEX","SJW","ARTNA",
+    "AES","BEP","CWEN","RUN","NOVA","SEDG","ENPH","FSLR","CSIQ",
+    # ── Communication Services ──────────────────────────────────────────────
+    "GOOGL","META","NFLX","DIS","CMCSA","VZ","T","TMUS","LUMN","CTL",
+    "CHTR","CABO","LBRDA","WBD","PARA","FOXA","SIRI","IACI","IAC",
+    "SNAP","PINS","TWTR","RDDT","BMBL","MTCH","YELP","ZI","SPNV",
+    "SPOT","SONO","YELP","ANGI","CARS","CDK","TDC","GDDY",
+    # ── High-volatility / momentum (premium-rich) ────────────────────────────
+    "GME","AMC","BBBY","CLOV","WKHS","RIDE","NKLA","HYLN","GOEV",
+    "SPCE","RKLB","ASTR","MNTS","ASTS","LUNR","RDW",
+    "HOOD","SOFI","OPEN","OFCR","UWMC","RKT","PFSI","GHLD",
+    "BARK","OPAD","GREE","ATER","CARV","HCDI",
+    # ── Liquid ETFs ─────────────────────────────────────────────────────────
+    "SPY","QQQ","IWM","DIA","MDY","VTI","VOO","IVV","RSP",
+    "GLD","SLV","GDX","GDXJ","IAU","SGOL",
+    "TLT","IEF","SHY","LQD","HYG","JNK","BND","AGG",
+    "XLE","XLF","XLK","XLV","XLI","XLU","XLRE","XLB","XLY","XLP","XLC",
+    "SMH","SOXX","IBB","ARKG","ARKK","ARKW","ARKF","ARKQ",
+    "EEM","EFA","EWZ","EWJ","FXI","KWEB","MCHI","VWO",
+    "USO","UNG","DBO","PDBC","DJP","CPER",
+    "VXX","UVXY","SVXY","VIXY",
+    "QLD","SSO","UPRO","TQQQ","SQQQ","SDS","SH","PSQ",
 ]
-# Remove duplicates while preserving order
-CSP_UNIVERSE = list(dict.fromkeys(CSP_UNIVERSE))
+# Deduplicate preserving order and cap at 520
+_seen = set()
+CSP_UNIVERSE = [t for t in CSP_UNIVERSE if t not in _seen and not _seen.add(t)][:520]
+
+CSP_MAX_WORKERS = 15  # higher parallelism for large universe
 
 NASDAQ_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -306,6 +382,23 @@ def score_ticker(sym, earn_str, earn_days):
         return None
 
 
+def fast_prefilter(sym):
+    """
+    Quick check using only fast_info — no history or options chain pull.
+    Returns (price, avg_vol) or None if ticker fails basic checks.
+    Runs in ~0.1s vs ~2s for full score.
+    """
+    try:
+        fi = yf.Ticker(sym).fast_info
+        px  = float(getattr(fi, "last_price", None) or getattr(fi, "previous_close", None) or 0)
+        vol = float(getattr(fi, "three_month_average_volume", None) or 0)
+        if px < 2 or vol < 300_000:
+            return None
+        return (px, vol)
+    except:
+        return None
+
+
 def score_csp_ticker(sym, earnings_map):
     """Score a ticker for a cash-secured put setup (Layer 2)."""
     try:
@@ -320,9 +413,9 @@ def score_csp_ticker(sym, earnings_map):
         if price <= 0:
             return None
 
-        # Volume check
+        # Volume check — use 30-day from history (more accurate than fast_info)
         avg_vol = float(h1y["Volume"].tail(30).mean())
-        if avg_vol < 500_000:
+        if avg_vol < 300_000:
             return None
 
         # RV calculations
@@ -474,21 +567,45 @@ def run_csp_scan():
     if _csp_cache["running"]:
         return
     _csp_cache["running"] = True
-    _csp_cache["progress"] = {"done": 0, "total": len(CSP_UNIVERSE), "phase": "scoring"}
     log.info("CSP scan started (%d tickers)", len(CSP_UNIVERSE))
 
-    # Reuse earnings map from L1 cache if fresh, else fetch fresh
     try:
         earnings_map = fetch_earnings_calendar()
     except Exception:
         earnings_map = {}
 
+    # ── Stage 1: Fast pre-filter (price + volume only, no options chain) ────
+    _csp_cache["progress"] = {"done": 0, "total": len(CSP_UNIVERSE), "phase": "pre-filter"}
+    log.info("Stage 1: pre-filtering %d tickers...", len(CSP_UNIVERSE))
+
+    passed = []
+    lock1  = threading.Lock()
+
+    def prefilter_one(sym):
+        result = fast_prefilter(sym)
+        with lock1:
+            _csp_cache["progress"]["done"] += 1
+            if result:
+                passed.append(sym)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=CSP_MAX_WORKERS) as pool:
+        futs = {pool.submit(prefilter_one, sym): sym for sym in CSP_UNIVERSE}
+        for f in concurrent.futures.as_completed(futs):
+            try: f.result()
+            except: pass
+
+    log.info("Stage 1 done: %d/%d passed pre-filter", len(passed), len(CSP_UNIVERSE))
+
+    # ── Stage 2: Full scoring with options chain (only on passed tickers) ───
+    _csp_cache["progress"] = {"done": 0, "total": len(passed), "phase": "scoring"}
+    log.info("Stage 2: scoring %d tickers with options chains...", len(passed))
+
     results = []
-    lock = threading.Lock()
+    lock2   = threading.Lock()
 
     def score_one(sym):
         r = score_csp_ticker(sym, earnings_map)
-        with lock:
+        with lock2:
             _csp_cache["progress"]["done"] += 1
             if r:
                 results.append(r)
@@ -498,8 +615,8 @@ def run_csp_scan():
                                    -x["rocAnn"])
                 )
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        futs = {pool.submit(score_one, sym): sym for sym in CSP_UNIVERSE}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=CSP_MAX_WORKERS) as pool:
+        futs = {pool.submit(score_one, sym): sym for sym in passed}
         for f in concurrent.futures.as_completed(futs):
             try: f.result()
             except: pass
@@ -508,10 +625,11 @@ def run_csp_scan():
         results,
         key=lambda x: ({"STRONG":0,"DECENT":1,"SKIP":2}.get(x["quality"],3), -x["rocAnn"])
     )
-    _csp_cache["ts"] = time.time()
-    _csp_cache["running"] = False
-    _csp_cache["progress"] = {"done": len(CSP_UNIVERSE), "total": len(CSP_UNIVERSE), "phase": "done"}
-    log.info("CSP scan done. %d results.", len(results))
+    _csp_cache["ts"]       = time.time()
+    _csp_cache["running"]  = False
+    _csp_cache["progress"] = {"done": len(passed), "total": len(passed), "phase": "done"}
+    log.info("CSP scan done. %d results from %d tickers (pre-filtered from %d).",
+             len(results), len(passed), len(CSP_UNIVERSE))
 
 
 def run_scan():
@@ -641,8 +759,15 @@ def api_csp_scan():
 def api_csp_progress():
     p = _csp_cache["progress"]
     pct = int(p["done"] / p["total"] * 100) if p["total"] > 0 else 0
-    return jsonify({"done": p["done"], "total": p["total"], "pct": pct,
-                    "phase": p["phase"], "running": _csp_cache["running"]})
+    phase_label = {
+        "pre-filter": f"Stage 1: Pre-filtering {len(CSP_UNIVERSE)} tickers...",
+        "scoring":    "Stage 2: Scoring options chains...",
+        "done":       "Done",
+        "idle":       "Idle",
+    }.get(p["phase"], p["phase"])
+    return jsonify({"done":p["done"], "total":p["total"], "pct":pct,
+                    "phase":p["phase"], "phaseLabel":phase_label,
+                    "universe": len(CSP_UNIVERSE), "running":_csp_cache["running"]})
 
 
 @app.route("/api/csp/refresh", methods=["POST"])
