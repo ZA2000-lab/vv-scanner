@@ -49,108 +49,127 @@ _csp_cache = {
     "running": False, "progress": {"done":0,"total":0,"phase":"idle"},
 }
 
-# Layer 2 universe — 500+ tickers across all S&P 500 sectors + ETFs + high-vol
-CSP_UNIVERSE = [
-    # ── Mega-cap tech ───────────────────────────────────────────────────────
-    "AAPL","MSFT","NVDA","GOOGL","GOOG","AMZN","META","TSLA","AVGO","ORCL",
-    "AMD","ADBE","CRM","INTU","NOW","PANW","CRWD","NET","DDOG","SNOW",
-    "MDB","PLTR","FTNT","ZBRA","CDNS","SNPS","ANSS","EPAM","PAYC","WDAY",
-    "ZS","OKTA","HUBS","TWLO","DOCN","CFLT","ESTC","GTLB","PATH","AI",
-    "INTC","QCOM","TXN","AVGO","AMAT","LRCX","KLAC","MCHP","ADI","MRVL",
-    "MU","WDC","STX","NTAP","HPE","DELL","HPQ","PSTG","SMCI","ARM","ON",
-    "AAPL","MSFT","CSCO","IBM","GLW","FFIV","JNPR","AKAM","CTSH","ACN",
-    "IT","EPAM","LDOS","BAH","SAIC","CACI","VRSK","NLOK","GEN","CYBR",
-    # ── Financials ──────────────────────────────────────────────────────────
-    "JPM","BAC","WFC","GS","MS","C","USB","TFC","PNC","FITB",
-    "HBAN","RF","CFG","KEY","MTB","ZION","CMA","FHN","ALLY","SYF",
-    "COF","DFS","AXP","V","MA","PYPL","SQ","AFRM","UPST","LC",
-    "BLK","BX","KKR","APO","ARES","CG","TPG","BAM","IVZ","AMG",
-    "SCHW","ETFC","IBKR","HOOD","COIN","MSTR","MARA","RIOT","HUT","BTBT",
-    "MET","PRU","AIG","ALL","TRV","CB","PGR","HIG","AFL","GL",
-    "BRK-B","LNC","FNF","FAF","CINF","RNR","AXS","RE","WRB","MKL",
-    "ICE","CME","CBOE","NDAQ","MKTX","MSCI","MCO","SPGI","FDS","INFO",
-    # ── Healthcare ──────────────────────────────────────────────────────────
-    "UNH","CVS","CI","ELV","HUM","CNC","MOH","OSCR",
-    "JNJ","PFE","MRK","ABBV","BMY","AZN","LLY","NVO","RHHBY",
-    "AMGN","GILD","BIIB","REGN","VRTX","SGEN","ALXN","INCY","EXEL","IONS",
-    "ISRG","SYK","MDT","BSX","EW","ZBH","HOLX","ICLR","MEDP",
-    "TMO","DHR","A","BIO","WAT","IDXX","VEEV","PHG","MTD","TER",
-    "CVS","ESRX","MCK","ABC","CAH","PDCO","HSIC",
-    "MRNA","BNTX","NVAX","SANOFI","ARCT","RVMD","KYMR",
-    # ── Consumer Discretionary ──────────────────────────────────────────────
-    "AMZN","TSLA","HD","LOW","TGT","WMT","COST","BJ","DG","DLTR",
-    "MCD","SBUX","CMG","YUM","QSR","DPZ","WEN","JACK","DENN",
-    "NKE","LULU","UAA","PVH","HBI","GOOS","SKX","DECK","ONON","CROX",
-    "BKNG","EXPE","ABNB","TRIP","LYFT","UBER","DASH","GRUB",
-    "DIS","NFLX","PARA","WBD","LYV","MSGS","RBLX","U","TTWO","EA","ATVI",
-    "GM","F","STLA","TM","HMC","RIVN","LCID","NIO","LI","XPEV","FSR",
-    "PTON","NWSA","NYT","SBAC","AMC","CNK","IMAX","RRR","PENN","DKNG","MGM","WYNN",
-    "W","ETSY","EBAY","WISH","CHWY","CHEGG","COUR",
-    "ANF","AEO","GPS","URBN","ROST","TJX","BURL","M","KSS","JWN",
-    # ── Consumer Staples ────────────────────────────────────────────────────
-    "PG","KO","PEP","PM","MO","MDLZ","KHC","GIS","CPB","SJM",
-    "CL","CHD","COTY","EL","KVUE","ULTA","BBWI","BF-B",
-    "KMB","CLX","RBGLY","RL","HELE","SPB",
-    "WBA","CVS","RAD","WDFC","CENT","SYY","US","PFGC",
-    "TSN","HRL","SFM","COTY","POST","MKC","THS",
-    # ── Energy ──────────────────────────────────────────────────────────────
-    "XOM","CVX","COP","EOG","PXD","DVN","FANG","MRO","APA","OVV",
-    "OXY","HES","VLO","PSX","MPC","DK","PBF","PARR",
-    "SLB","HAL","BKR","NOV","WHD","LBRT","PTEN",
-    "KMI","WMB","OKE","ET","MMP","EPD","LNG","CTRA","AR","EQT",
-    "BP","SHEL","TTE","ENB","SU","CNQ","CVE","IMO",
-    # ── Industrials ─────────────────────────────────────────────────────────
-    "GE","HON","MMM","CAT","DE","EMR","ETN","PH","ROK","GNRC",
-    "RTX","LMT","GD","NOC","BA","HII","LHX","TDG","HEI","KTOS",
-    "UPS","FDX","JBHT","XPO","CHRW","ODFL","SAIA","WERN","KNX",
-    "CSX","UNP","NSC","CP","CNI","WAB","TRN",
-    "WM","RSG","CWST","SRCL","CLH",
-    "FAST","GWW","MSC","AIT","DNOW","HDS","WESCO","SITE",
-    "IR","OTIS","CARR","TT","LII","AAON","WSO",
-    "AME","IDEX","ROP","FTV","NDSN","AXTA","PPG","SHW","RPM",
-    "ITW","DOV","XYL","GXO","RXO","SAIA","HUBG",
-    # ── Materials ───────────────────────────────────────────────────────────
-    "LIN","APD","AIR","CF","MOS","NTR","FMC","ICL","OLN",
-    "FCX","NEM","GOLD","AEM","KGC","EGO","IAG","AU","WPM","PAAS",
-    "NUE","STLD","RS","CMC","MT","CLF","X","ATI",
-    "DD","DOW","LYB","AVNT","EMN","ALB","LTHM","PLL","MP","ENPH",
-    "BLL","CCK","PKG","IP","WRK","SON","SLGN",
-    # ── Real Estate ─────────────────────────────────────────────────────────
-    "AMT","CCI","EQIX","SBAC","DLR","IRM","QTS","CONE",
-    "SPG","O","VICI","GLPI","MGP","BXP","SLG","ARE","EQR","AVB",
-    "PLD","PSA","EXR","CUBE","LSI","NSA","REXR",
-    "WELL","VTR","OHI","HR","DOC","PEAK","SBRA","CTRE",
-    # ── Utilities ───────────────────────────────────────────────────────────
-    "NEE","DUK","SO","D","AEP","EXC","XEL","WEC","ES","ETR",
-    "PCG","EIX","PPL","CMS","NI","PNW","EVRG","IDACORP",
-    "AWK","WTR","YORW","MSEX","SJW","ARTNA",
-    "AES","BEP","CWEN","RUN","NOVA","SEDG","ENPH","FSLR","CSIQ",
-    # ── Communication Services ──────────────────────────────────────────────
-    "GOOGL","META","NFLX","DIS","CMCSA","VZ","T","TMUS","LUMN","CTL",
-    "CHTR","CABO","LBRDA","WBD","PARA","FOXA","SIRI","IACI","IAC",
-    "SNAP","PINS","TWTR","RDDT","BMBL","MTCH","YELP","ZI","SPNV",
-    "SPOT","SONO","YELP","ANGI","CARS","CDK","TDC","GDDY",
-    # ── High-volatility / momentum (premium-rich) ────────────────────────────
-    "GME","AMC","BBBY","CLOV","WKHS","RIDE","NKLA","HYLN","GOEV",
-    "SPCE","RKLB","ASTR","MNTS","ASTS","LUNR","RDW",
-    "HOOD","SOFI","OPEN","OFCR","UWMC","RKT","PFSI","GHLD",
-    "BARK","OPAD","GREE","ATER","CARV","HCDI",
-    # ── Liquid ETFs ─────────────────────────────────────────────────────────
-    "SPY","QQQ","IWM","DIA","MDY","VTI","VOO","IVV","RSP",
-    "GLD","SLV","GDX","GDXJ","IAU","SGOL",
-    "TLT","IEF","SHY","LQD","HYG","JNK","BND","AGG",
-    "XLE","XLF","XLK","XLV","XLI","XLU","XLRE","XLB","XLY","XLP","XLC",
-    "SMH","SOXX","IBB","ARKG","ARKK","ARKW","ARKF","ARKQ",
-    "EEM","EFA","EWZ","EWJ","FXI","KWEB","MCHI","VWO",
-    "USO","UNG","DBO","PDBC","DJP","CPER",
-    "VXX","UVXY","SVXY","VIXY",
-    "QLD","SSO","UPRO","TQQQ","SQQQ","SDS","SH","PSQ",
-]
-# Deduplicate preserving order and cap at 520
-_seen = set()
-CSP_UNIVERSE = [t for t in CSP_UNIVERSE if t not in _seen and not _seen.add(t)][:520]
+# ── Layer 2 universe — built dynamically at startup ──────────────────────────
 
-CSP_MAX_WORKERS = 15  # higher parallelism for large universe
+# Hardcoded extras: ETFs, high-vol names, and specific tickers to always include
+CSP_EXTRAS = [
+    # Specific adds
+    "CDE",
+    # Mega-cap anchors (always include)
+    "AAPL","MSFT","NVDA","GOOGL","AMZN","META","TSLA","AVGO","ORCL","AMD",
+    "ADBE","CRM","INTU","NOW","PANW","CRWD","NET","DDOG","SNOW","PLTR","MDB",
+    "INTC","QCOM","TXN","AMAT","LRCX","KLAC","MU","SMCI","ARM","ON","MRVL",
+    "CSCO","IBM","DELL","HPQ","HPE","ACN","IT","CTSH","EPAM","VRSK",
+    "JPM","BAC","WFC","GS","MS","C","V","MA","AXP","COF","DFS","ALLY","SYF",
+    "BLK","BX","KKR","APO","ARES","SCHW","IBKR","HOOD","COIN","MSTR",
+    "UNH","LLY","JNJ","ABBV","MRK","PFE","AMGN","GILD","VRTX","REGN","ISRG",
+    "TMO","DHR","A","WAT","IDXX","VEEV","MRNA","BIIB","INCY","SYK","MDT","BSX",
+    "MCK","ABC","CAH","CI","ELV","HUM","CVS","UNH","CNC","MOH",
+    "XOM","CVX","COP","EOG","DVN","OXY","HES","MRO","APA","OVV","FANG",
+    "SLB","HAL","BKR","VLO","PSX","MPC","KMI","WMB","OKE","LNG","EQT","AR",
+    "GE","HON","CAT","DE","MMM","EMR","ETN","PH","ROK","ITW","DOV","AME","ROP",
+    "RTX","LMT","GD","NOC","BA","HII","LHX","TDG","UPS","FDX","CSX","UNP","NSC",
+    "WM","RSG","FAST","GWW","SHW","PPG","IR","OTIS","CARR","TT",
+    "HD","WMT","COST","TGT","MCD","SBUX","CMG","YUM","NKE","LULU","DECK","ONON",
+    "BKNG","EXPE","ABNB","UBER","LYFT","DASH","AMZN","ETSY","EBAY","CHWY",
+    "DIS","NFLX","CMCSA","WBD","PARA","RBLX","EA","TTWO","LYV","DKNG","MGM","WYNN",
+    "GM","F","RIVN","NIO","LCID","XPEV","LI",
+    "ROST","TJX","BURL","DG","DLTR","LOW","ANF","AEO","GPS","URBN","KSS","JWN","M",
+    "PG","KO","PEP","PM","MO","MDLZ","KHC","GIS","CL","CHD","KMB","CLX",
+    "EL","ULTA","BBWI","TSN","HRL","MKC","SJM","CPB","COST","SYY",
+    "NEE","DUK","SO","D","AEP","EXC","XEL","WEC","PCG","EIX","PPL","AES","ENPH","FSLR",
+    "LIN","APD","CF","NTR","FCX","NEM","GOLD","AEM","KGC","WPM","PAAS","CDE",
+    "NUE","STLD","CLF","DD","DOW","LYB","ALB","MP","SHW","ECL",
+    "AMT","CCI","EQIX","SBAC","DLR","IRM","SPG","O","VICI","PLD","PSA","EXR","EQR","AVB",
+    "WELL","VTR","OHI","ARE","BXP","SLG",
+    "VZ","T","TMUS","CMCSA","CHTR","META","GOOGL","SNAP","PINS","SPOT","RDDT",
+    "HOOD","SOFI","MARA","RIOT","COIN","MSTR",
+    "GME","AMC","SPCE","RKLB","ASTS","RIVN","LCID","PLTR","BBBY","CLOV","WKHS",
+    # Mining / precious metals
+    "NEM","GOLD","AEM","KGC","WPM","PAAS","EGO","IAG","AU","HL","SILV","FSM",
+    "CDE","NGD","USAU","GFI","HMY","SBSW",
+    # Liquid ETFs — always scan
+    "SPY","QQQ","IWM","DIA","MDY","VTI","VOO","IVV","RSP",
+    "GLD","SLV","GDX","GDXJ","IAU",
+    "TLT","IEF","LQD","HYG","JNK","AGG","BND",
+    "XLE","XLF","XLK","XLV","XLI","XLU","XLRE","XLB","XLY","XLP","XLC",
+    "SMH","SOXX","IBB","ARKK","ARKG","EEM","EFA","EWZ","EWJ","FXI","KWEB","MCHI",
+    "USO","UNG","CPER","GDX","SLV",
+    "VXX","UVXY","TQQQ","SQQQ","UPRO","SSO","SDS","SH","QLD",
+]
+
+def _fetch_sp_tickers():
+    """Fetch S&P 500 + S&P 400 + S&P 600 from Wikipedia. Returns flat list."""
+    tables = {
+        "sp500": "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
+        "sp400": "https://en.wikipedia.org/wiki/List_of_S%26P_400_companies",
+        "sp600": "https://en.wikipedia.org/wiki/List_of_S%26P_600_companies",
+    }
+    tickers = []
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; bot/1.0)"}
+    for name, url in tables.items():
+        try:
+            resp = requests.get(url, headers=headers, timeout=20)
+            if resp.status_code != 200:
+                log.warning("Wikipedia %s HTTP %d", name, resp.status_code)
+                continue
+            dfs = pd.read_html(resp.text)
+            for df in dfs:
+                cols = [str(c).lower() for c in df.columns]
+                sym_col = next(
+                    (df.columns[i] for i, c in enumerate(cols)
+                     if c in ("symbol", "ticker", "symbol[3]", "ticker symbol")),
+                    None
+                )
+                if sym_col is None:
+                    continue
+                batch = (df[sym_col]
+                         .astype(str)
+                         .str.split(r"[\s\[]").str[0]   # take first token
+                         .str.replace(r"\..*", "", regex=True)
+                         .str.upper()
+                         .str.strip()
+                         .tolist())
+                batch = [t.replace(".", "-") for t in batch]
+                batch = [t for t in batch if 1 <= len(t) <= 6 and t.replace("-","").isalpha()]
+                tickers.extend(batch)
+                log.info("Wikipedia %s: %d tickers fetched", name, len(batch))
+                break
+        except Exception as e:
+            log.warning("Wikipedia fetch %s: %s", name, e)
+    return tickers
+
+
+def _build_csp_universe():
+    """Combine Wikipedia S&P 1500 + hardcoded extras. Deduplicated."""
+    log.info("Building CSP universe from Wikipedia S&P 500/400/600 + extras...")
+    wiki = _fetch_sp_tickers()
+    combined = CSP_EXTRAS + wiki
+    seen, result = set(), []
+    for t in combined:
+        if t not in seen:
+            seen.add(t)
+            result.append(t)
+    log.info("CSP universe: %d tickers (%d Wikipedia + %d extras)",
+             len(result), len(set(wiki)), len(set(CSP_EXTRAS)))
+    return result
+
+
+# Build universe in background thread — scan won't start until it's ready
+CSP_UNIVERSE = list(CSP_EXTRAS)  # fallback until background load completes
+_csp_universe_lock = threading.Lock()
+
+def _load_universe_bg():
+    global CSP_UNIVERSE
+    full = _build_csp_universe()
+    with _csp_universe_lock:
+        CSP_UNIVERSE = full
+    log.info("CSP universe ready: %d tickers", len(CSP_UNIVERSE))
+
+threading.Thread(target=_load_universe_bg, daemon=True).start()
+
+CSP_MAX_WORKERS = 20  # parallel workers for large universe
+
 
 NASDAQ_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -567,6 +586,13 @@ def run_csp_scan():
     if _csp_cache["running"]:
         return
     _csp_cache["running"] = True
+
+    # Wait up to 30s for background universe load to finish
+    _csp_cache["progress"] = {"done": 0, "total": 0, "phase": "loading universe"}
+    deadline = time.time() + 30
+    while len(CSP_UNIVERSE) <= len(CSP_EXTRAS) and time.time() < deadline:
+        time.sleep(1)
+
     log.info("CSP scan started (%d tickers)", len(CSP_UNIVERSE))
 
     try:
@@ -760,6 +786,7 @@ def api_csp_progress():
     p = _csp_cache["progress"]
     pct = int(p["done"] / p["total"] * 100) if p["total"] > 0 else 0
     phase_label = {
+        "loading universe": f"Loading S&P 500/400/600 universe...",
         "pre-filter": f"Stage 1: Pre-filtering {len(CSP_UNIVERSE)} tickers...",
         "scoring":    "Stage 2: Scoring options chains...",
         "done":       "Done",
