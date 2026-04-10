@@ -174,8 +174,8 @@
     </div>
 
     <div class="tabs">
-      <button class="tab active" id="tab-scan"     onclick="setTab('scan')">Layer 1 &middot; IV Crush</button>
-      <button class="tab"        id="tab-l2"       onclick="setTab('l2')">Layer 2 &middot; Puts</button>
+      <button class="tab"        id="tab-scan"     onclick="setTab('scan')">Layer 1 &middot; IV Crush</button>
+      <button class="tab active" id="tab-l2"       onclick="setTab('l2')">Layer 2 &middot; Puts</button>
       <button class="tab"        id="tab-playbook" onclick="setTab('playbook')">Playbook</button>
     </div>
 
@@ -287,7 +287,7 @@
 
   let allResults = [];
   let activeFilter = "all";
-  let activeTab = "scan";
+  let activeTab = "l2";
   let expandedCards = new Set();
   let progressInterval = null;
   let cspResults = [];
@@ -295,7 +295,7 @@
   let cspExpanded = new Set();
   let cspProgInterval = null;
 
-  window.addEventListener("DOMContentLoaded", () => { loadScan(); });
+  window.addEventListener("DOMContentLoaded", () => { loadCSP(); });
 
   async function loadScan() {
     showLoading();
