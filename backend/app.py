@@ -532,10 +532,53 @@ def score_csp_ticker(sym, earnings_map):
         roc_pct    = round(mid * 100 / collateral * 100, 2) if collateral > 0 else 0
         roc_ann    = round(roc_pct * (365 / target_dte), 1) if target_dte > 0 else 0
 
-        # Earnings check — skip if earnings within expiry window
-        earn_within = sym in earnings_map and earnings_map[sym][1] <= target_dte
-        earn_str    = earnings_map[sym][0] if sym in earnings_map else None
-        earn_days   = earnings_map[sym][1] if sym in earnings_map else None
+        # Earnings check — cross-check Nasdaq calendar with yfinance
+        # Use the EARLIER of the two dates to be conservative
+        nasdaq_days = earnings_map.get(sym, (None, None))[1]
+        nasdaq_str  = earnings_map.get(sym, (None, None))[0]
+
+        # Pull yfinance earnings date
+        yf_earn_days = None
+        try:
+            cal = stock.calendar
+            if cal is not None and not cal.empty:
+                # calendar is a DataFrame with dates as columns, rows are fields
+                earn_col = cal.columns[0] if len(cal.columns) > 0 else None
+                if earn_col is not None:
+                    earn_dt = pd.Timestamp(earn_col)
+                    yf_earn_days = (earn_dt.date() - today_d).days
+        except Exception:
+            pass
+
+        # Also try fast_info earnings date
+        if yf_earn_days is None:
+            try:
+                ei = stock.earnings_dates
+                if ei is not None and not ei.empty:
+                    future = ei[ei.index.date > today_d] if hasattr(ei.index, 'date') else ei[ei.index > pd.Timestamp(today_d)]
+                    if not future.empty:
+                        next_earn = future.index[0]
+                        yf_earn_days = (next_earn.date() - today_d).days
+            except Exception:
+                pass
+
+        # Use earliest confirmed date — conservative
+        all_earn_days = [d for d in [nasdaq_days, yf_earn_days] if d is not None and d >= 0]
+        best_earn_days = min(all_earn_days) if all_earn_days else None
+
+        earn_within = best_earn_days is not None and best_earn_days <= target_dte
+
+        # Use whichever source gave us the earlier date for display
+        if best_earn_days == yf_earn_days and yf_earn_days is not None:
+            earn_dt_display = (today_d + timedelta(days=yf_earn_days)).strftime("%b %d")
+            earn_str  = earn_dt_display
+            earn_days = yf_earn_days
+        else:
+            earn_str  = nasdaq_str
+            earn_days = nasdaq_days
+
+        log.debug("%s earnings: nasdaq=%s yf=%s used=%s within=%s",
+                  sym, nasdaq_days, yf_earn_days, best_earn_days, earn_within)
 
         # Quality rating
         if iv_rank < 45 or earn_within or spread_pct > 15:
