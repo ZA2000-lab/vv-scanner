@@ -258,17 +258,25 @@ return candidates[0][1], candidates[0][0]
 # ── Nasdaq bulk earnings calendar ──────────────────────────────────────────
 
 def fetch_nasdaq_calendar() -> dict:
+“””
+Fetches Nasdaq earnings calendar up to DAYS_AHEAD days out.
+Hard stop after 90 seconds total so it never blocks the scan indefinitely.
+“””
 earnings_map = {}
-today   = date.today()
-session = requests.Session()
+today     = date.today()
+deadline  = time.time() + 90   # never run longer than 90s
+session   = requests.Session()
 session.headers.update(NASDAQ_HEADERS)
 d = today
 while d <= today + timedelta(days=DAYS_AHEAD):
+if time.time() > deadline:
+log.warning(“Nasdaq calendar: hit 90s deadline at %s”, d)
+break
 if d.weekday() < 5:
 try:
 resp = session.get(
 “https://api.nasdaq.com/api/calendar/earnings?date=” + d.strftime(”%Y-%m-%d”),
-timeout=8)
+timeout=5)   # 5s per request
 if resp.status_code == 200:
 rows = (resp.json().get(“data”) or {}).get(“rows”) or []
 diff = (d - today).days
@@ -277,11 +285,11 @@ sym = (row.get(“symbol”) or “”).upper().strip().replace(”/”, “-”
 if sym and 1 <= len(sym) <= 6 and sym.replace(”-”,””).isalpha():
 if sym not in earnings_map:
 earnings_map[sym] = (d.strftime(”%b %d”), diff)
-time.sleep(0.1)
+time.sleep(0.08)
 except Exception as e:
 log.warning(“Nasdaq cal %s: %s”, d, e)
 d += timedelta(days=1)
-log.info(“Nasdaq calendar: %d tickers”, len(earnings_map))
+log.info(“Nasdaq calendar: %d tickers (%d days scanned)”, len(earnings_map), (d - today).days)
 return earnings_map
 
 # ── Stage 1: Fast pre-filter ───────────────────────────────────────────────
