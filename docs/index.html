@@ -21,120 +21,118 @@
     input  { outline:none; font-family:inherit; }
 
 ```
-@keyframes spin    { to { transform:rotate(360deg); } }
-@keyframes fadeUp  { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-@keyframes pulse   { 0%,100% { opacity:1; } 50% { opacity:.4; } }
-@keyframes blink   { 0%,100% { opacity:1; } 50% { opacity:0; } }
+@keyframes spin   { to { transform:rotate(360deg); } }
+@keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes pulse  { 0%,100%{opacity:1} 50%{opacity:.35} }
+@keyframes blink  { 0%,100%{opacity:1} 50%{opacity:0} }
 
 #app { max-width:520px; margin:0 auto; }
 
-/* ── Header ────────────────────────────────────────────────── */
+/* ── Header ── */
 #header {
-  background:#080c12ee;
-  backdrop-filter:blur(12px);
-  -webkit-backdrop-filter:blur(12px);
+  background:#080c12ee; backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
   border-bottom:1px solid var(--border);
-  padding-top:calc(env(safe-area-inset-top) + 12px);
   padding:calc(env(safe-area-inset-top) + 12px) 14px 10px;
   position:sticky; top:0; z-index:100;
 }
 .header-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-.logo        { display:flex; align-items:center; gap:10px; }
-.logo-badge  { width:30px; height:30px; background:linear-gradient(135deg,var(--green),var(--blue)); border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; color:#000; flex-shrink:0; }
-.logo-title  { font-size:14px; font-weight:700; color:var(--bright); letter-spacing:.03em; }
-.logo-sub    { font-size:9px; color:var(--muted); letter-spacing:.08em; margin-top:1px; }
+.logo       { display:flex; align-items:center; gap:10px; }
+.logo-badge { width:30px; height:30px; background:linear-gradient(135deg,var(--green),var(--blue)); border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; color:#000; flex-shrink:0; }
+.logo-title { font-size:14px; font-weight:700; color:var(--bright); letter-spacing:.03em; }
+.logo-sub   { font-size:9px; color:var(--muted); letter-spacing:.08em; margin-top:1px; }
 #refresh-btn { background:#0f1f0f; border:1px solid var(--green); border-radius:8px; padding:7px 13px; color:var(--green); font-size:12px; font-weight:700; display:flex; align-items:center; gap:5px; transition:all .15s; }
 #refresh-btn:active { opacity:.7; transform:scale(.97); }
-#refresh-btn:disabled { opacity:.5; cursor:default; }
+#refresh-btn:disabled { opacity:.4; cursor:default; }
 .spin { display:inline-block; animation:spin .8s linear infinite; }
 
 .tabs { display:flex; gap:6px; margin-bottom:8px; }
 .tab  { flex:1; padding:7px 0; border-radius:7px; font-size:12px; font-weight:400; color:var(--muted); background:transparent; border:1px solid var(--border); transition:all .15s; }
 .tab.active { font-weight:700; color:var(--bright); background:var(--border); border-color:var(--dim); }
 
-.filters { display:flex; gap:5px; margin-bottom:0; }
-.fpill { flex:1; padding:5px 2px; border-radius:6px; font-size:10px; font-weight:400; color:var(--muted); background:transparent; border:1px solid var(--border); transition:all .15s; text-align:center; white-space:nowrap; }
-.fpill.active-all    { color:var(--muted);  background:#ffffff10; border-color:var(--dim);    font-weight:700; }
+.filters { display:flex; gap:5px; }
+.fpill { flex:1; padding:5px 2px; border-radius:6px; font-size:10px; color:var(--muted); background:transparent; border:1px solid var(--border); transition:all .15s; text-align:center; white-space:nowrap; }
+.fpill.active-all    { color:var(--muted);  background:#ffffff10; border-color:var(--dim); font-weight:700; }
 .fpill.active-strong { color:var(--green);  background:#00e87a15; border-color:#00e87a50; font-weight:700; }
 .fpill.active-decent { color:var(--blue);   background:#38b6ff15; border-color:#38b6ff50; font-weight:700; }
 .fpill.active-skip   { color:var(--red);    background:#ff445515; border-color:#ff445550; font-weight:700; }
 
 #content { padding:12px 12px 60px; }
 
-/* ── Loading / progress screen ─────────────────────────────── */
-#csp-loading { text-align:center; padding:40px 20px 32px; animation:fadeUp .3s ease; }
-.spinner { width:36px; height:36px; border:3px solid var(--border); border-top:3px solid var(--green); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 16px; }
-.load-title { font-size:13px; color:var(--green); font-weight:700; margin-bottom:12px; min-height:18px; }
+/* ── Loading screen ── */
+#csp-loading { padding:40px 20px 32px; animation:fadeUp .3s ease; }
+.spinner     { width:36px; height:36px; border:3px solid var(--border); border-top:3px solid var(--green); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 16px; }
+#load-title  { font-size:13px; color:var(--green); font-weight:700; margin-bottom:4px; text-align:center; min-height:18px; }
+#load-sub    { font-size:11px; color:var(--muted); text-align:center; margin-bottom:14px; min-height:14px; }
 
-#prog-wrap { margin:0 0 14px; }
-#prog-track { background:var(--border); border-radius:6px; height:7px; overflow:hidden; margin-bottom:7px; }
-#prog-bar { height:100%; background:linear-gradient(90deg,var(--green),var(--blue)); border-radius:6px; width:0%; transition:width .6s ease; }
-#prog-pct { font-size:11px; color:var(--muted); }
+#prog-wrap  { margin-bottom:10px; display:none; }
+#prog-track { background:var(--border); border-radius:6px; height:7px; overflow:hidden; margin-bottom:6px; }
+#prog-bar   { height:100%; background:linear-gradient(90deg,var(--green),var(--blue)); border-radius:6px; width:0%; transition:width .6s ease; }
+#prog-pct   { font-size:11px; color:var(--muted); text-align:center; }
 
-#prog-stats {
-  background:var(--card); border:1px solid var(--border); border-radius:10px;
-  padding:12px 14px; margin:12px 0; text-align:left;
-}
-.pstat-row { display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:11px; }
-.pstat-row + .pstat-row { border-top:1px solid var(--border); padding-top:7px; margin-top:3px; }
-.pstat-label { color:var(--muted); }
-.pstat-val   { font-weight:700; }
+#prog-found  { font-size:14px; color:var(--green); font-weight:700; text-align:center; margin:8px 0 4px; display:none; }
+#prog-ticker { font-size:11px; color:var(--blue); text-align:center; margin-bottom:12px; min-height:14px; animation:pulse 1.5s infinite; display:none; }
 
-#prog-ticker {
-  font-size:12px; color:var(--blue); text-align:center;
-  margin-bottom:6px; min-height:16px;
-  animation:pulse 1.5s ease-in-out infinite;
-}
-#prog-found { font-size:13px; color:var(--green); font-weight:700; text-align:center; margin-bottom:14px; min-height:16px; }
+#prog-stats { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:11px 14px; margin:10px 0; display:none; }
+.ps-row     { display:flex; justify-content:space-between; font-size:11px; padding:3px 0; }
+.ps-row + .ps-row { border-top:1px solid var(--border); padding-top:6px; margin-top:3px; }
+.ps-label   { color:var(--muted); }
+.ps-val     { font-weight:700; }
 
-.load-steps { margin-top:14px; border-top:1px solid var(--border); padding-top:12px; }
-.load-step  { font-size:10px; color:var(--dim); margin-bottom:4px; text-align:left; }
+#conn-status { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; margin:12px 0; text-align:center; }
+#conn-dots   { font-size:11px; color:var(--muted); margin-bottom:8px; }
+#conn-timer  { font-size:22px; font-weight:800; color:var(--blue); margin-bottom:4px; }
+#conn-msg    { font-size:11px; color:var(--dim); line-height:1.5; }
 
-/* live result flash */
-.live-badge {
-  display:inline-block; background:var(--green); color:#000;
-  font-size:9px; font-weight:800; border-radius:4px; padding:1px 5px;
-  margin-left:6px; animation:blink .6s ease 3;
-}
+.load-steps  { border-top:1px solid var(--border); padding-top:12px; margin-top:12px; }
+.load-step   { font-size:10px; color:var(--dim); margin-bottom:4px; }
 
-/* ── Cards ─────────────────────────────────────────────────── */
-.csp-card         { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:10px; overflow:hidden; animation:fadeUp .4s ease both; cursor:pointer; transition:border-color .2s; }
-.csp-card:active  { opacity:.9; transform:scale(.99); }
-.csp-card.strong  { border-color:#003320; }
-.csp-card.decent  { border-color:#001a33; }
-.csp-card.skip    { border-color:#1a0208; }
+.live-badge  { display:inline-block; background:var(--green); color:#000; font-size:9px; font-weight:800; border-radius:4px; padding:1px 5px; margin-left:5px; animation:blink .5s ease 4; }
+
+/* ── Cards ── */
+.csp-card        { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:10px; overflow:hidden; animation:fadeUp .4s ease both; cursor:pointer; transition:border-color .2s; }
+.csp-card:active { opacity:.9; transform:scale(.99); }
+.csp-card.strong { border-color:#003320; }
+.csp-card.decent { border-color:#001a33; }
+.csp-card.skip   { border-color:#1a0208; }
 .csp-card.open.strong { background:#001a0d; }
 .csp-card.open.decent { background:#001020; }
 .csp-card.open.skip   { background:#1a0408; }
-.csp-header { padding:14px 14px 12px; }
-.csp-top    { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px; }
+.csp-header  { padding:14px 14px 12px; }
+.csp-top     { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px; }
 .csp-metrics { display:flex; gap:7px; flex-wrap:wrap; }
 .csp-metric  { background:#ffffff08; border:1px solid var(--border); border-radius:6px; padding:5px 9px; text-align:center; }
-.csp-metric-label { font-size:9px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; margin-bottom:2px; }
-.csp-metric-val   { font-size:12px; font-weight:700; }
-.csp-body   { border-top:1px solid var(--borderhi); padding:14px; animation:fadeUp .2s ease; }
-.csp-grid   { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; font-size:12px; line-height:1.85; }
-.csp-block  { background:#07090e; border:1px solid var(--border); border-radius:8px; padding:11px 13px; }
-.iv-bar-wrap  { display:flex; align-items:center; gap:8px; margin-top:8px; }
-.iv-bar-track { flex:1; background:var(--border); border-radius:3px; height:5px; overflow:hidden; }
-.iv-bar-fill  { height:100%; border-radius:3px; }
+.csp-ml      { font-size:9px; color:var(--muted); letter-spacing:.07em; text-transform:uppercase; margin-bottom:2px; }
+.csp-mv      { font-size:12px; font-weight:700; }
+.csp-body    { border-top:1px solid var(--borderhi); padding:14px; animation:fadeUp .2s ease; }
+.csp-grid    { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+.csp-block   { background:#07090e; border:1px solid var(--border); border-radius:8px; padding:11px 13px; font-size:12px; line-height:1.9; }
+.iv-bar-wrap { display:flex; align-items:center; gap:8px; margin-top:8px; }
+.iv-bar-track{ flex:1; background:var(--border); border-radius:3px; height:5px; overflow:hidden; }
+.iv-bar-fill { height:100%; border-radius:3px; }
 
 .ticker-badge { border-radius:8px; padding:6px 10px; text-align:center; min-width:52px; flex-shrink:0; }
 .ticker-sym   { font-size:15px; font-weight:800; color:var(--bright); letter-spacing:.02em; }
 .ticker-price { font-size:11px; font-weight:700; }
-.stock-info   { flex:1; margin:0 10px; }
+.stock-info   { flex:1; margin:0 10px; min-width:0; }
 .stock-name   { font-size:13px; color:var(--text); font-weight:600; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .card-right   { display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0; }
 .rec-badge    { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:800; letter-spacing:.06em; }
 .card-toggle  { text-align:right; font-size:11px; color:var(--dim); margin-top:8px; }
 .block-title  { font-size:10px; letter-spacing:.12em; font-weight:800; text-transform:uppercase; margin-bottom:10px; }
+.verdict      { border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:12px; color:var(--text); line-height:1.6; }
+.trade-block  { background:#07090e; border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:10px; font-size:12px; line-height:1.9; }
+.t-row        { display:flex; justify-content:space-between; align-items:center; padding:3px 0; }
+.t-row + .t-row { border-top:1px solid var(--border); padding-top:6px; margin-top:3px; }
+.t-label      { color:var(--muted); }
+.verify-note  { margin-top:10px; font-size:10px; color:var(--dim); line-height:1.6; text-align:center; }
 
-/* ── Status bar ────────────────────────────────────────────── */
-#csp-status-bar { text-align:center; font-size:10px; color:var(--dim); margin-top:12px; line-height:1.7; }
+/* ── Status + errors ── */
+#csp-status-bar { text-align:center; font-size:10px; color:var(--dim); margin-top:12px; line-height:1.7; display:none; }
 #csp-error      { display:none; }
 #csp-empty      { display:none; text-align:center; padding:48px 20px; color:var(--dim); }
+#csp-results    { display:none; }
 
-/* ── Playbook ───────────────────────────────────────────────── */
+/* ── Playbook ── */
 .pb-intro   { background:#001a0d; border:1px solid #00e87a22; border-left:3px solid var(--green); border-radius:8px; padding:12px 14px; margin-bottom:12px; font-size:12px; color:var(--text); line-height:1.75; }
 .pb-section { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:13px 14px; margin-bottom:10px; }
 .pb-title   { font-size:11px; letter-spacing:.1em; font-weight:800; text-transform:uppercase; margin-bottom:10px; }
@@ -142,13 +140,6 @@
 .pb-bullet  { font-weight:800; flex-shrink:0; }
 .pb-tag     { border-radius:3px; padding:1px 6px; font-size:11px; font-weight:700; margin-right:6px; }
 .disclaimer { font-size:10px; color:var(--dim); text-align:center; line-height:1.7; margin-top:12px; }
-
-.trade-block { background:#07090e; border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:10px; }
-.verdict     { border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:12px; color:var(--text); line-height:1.6; }
-.timing-row  { display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:4px 0; }
-.timing-row + .timing-row { border-top:1px solid var(--border); margin-top:4px; padding-top:8px; }
-.timing-label { color:var(--muted); }
-.verify-note  { margin-top:10px; font-size:10px; color:var(--dim); line-height:1.6; text-align:center; }
 ```
 
   </style>
@@ -179,125 +170,90 @@
 
 <div id="scan-controls">
   <div class="filters">
-    <button class="fpill active-all"    id="cpill-all"    onclick="setCspFilter('all')">All</button>
-    <button class="fpill"               id="cpill-strong" onclick="setCspFilter('strong')" style="color:var(--green)">&#9733; Strong</button>
-    <button class="fpill"               id="cpill-decent" onclick="setCspFilter('decent')" style="color:var(--blue)">&#9670; Decent</button>
-    <button class="fpill"               id="cpill-skip"   onclick="setCspFilter('skip')"   style="color:var(--red)">&#9675; Skip</button>
+    <button class="fpill active-all" id="cpill-all"    onclick="setCspFilter('all')">All</button>
+    <button class="fpill"            id="cpill-strong" onclick="setCspFilter('strong')" style="color:var(--green)">&#9733; Strong</button>
+    <button class="fpill"            id="cpill-decent" onclick="setCspFilter('decent')" style="color:var(--blue)">&#9670; Decent</button>
+    <button class="fpill"            id="cpill-skip"   onclick="setCspFilter('skip')"   style="color:var(--red)">&#9675; Skip</button>
   </div>
 </div>
 ```
 
-  </div>
+  </div><!-- /header -->
 
   <div id="content">
 
 ```
-<!-- ── CSP Loading Screen ─────────────────────────────────── -->
+<!-- Loading screen -->
 <div id="csp-loading">
   <div class="spinner"></div>
-  <div class="load-title" id="load-title">Starting scan...</div>
+  <div id="load-title">Connecting to server...</div>
+  <div id="load-sub">&nbsp;</div>
 
-  <div id="prog-wrap" style="display:none">
+  <div id="conn-status">
+    <div id="conn-dots">&#9679; &#9679; &#9679;</div>
+    <div id="conn-timer">0s</div>
+    <div id="conn-msg">Waiting for server to respond.<br>Railway may take up to 60s to wake from sleep.</div>
+  </div>
+
+  <div id="prog-wrap">
     <div id="prog-track"><div id="prog-bar"></div></div>
     <div id="prog-pct"></div>
   </div>
 
-  <div id="prog-found" style="display:none"></div>
-  <div id="prog-ticker" style="display:none"></div>
+  <div id="prog-found"></div>
+  <div id="prog-ticker"></div>
 
-  <div id="prog-stats" style="display:none">
-    <div class="pstat-row">
-      <span class="pstat-label">Universe</span>
-      <span class="pstat-val" id="pstat-universe">—</span>
-    </div>
-    <div class="pstat-row">
-      <span class="pstat-label">Passed pre-filter</span>
-      <span class="pstat-val" id="pstat-passed">—</span>
-    </div>
-    <div class="pstat-row">
-      <span class="pstat-label">Elapsed</span>
-      <span class="pstat-val" id="pstat-elapsed">—</span>
-    </div>
-    <div class="pstat-row">
-      <span class="pstat-label">Est. remaining</span>
-      <span class="pstat-val" id="pstat-eta">—</span>
-    </div>
+  <div id="prog-stats">
+    <div class="ps-row"><span class="ps-label">Universe</span>    <span class="ps-val" id="pstat-univ">—</span></div>
+    <div class="ps-row"><span class="ps-label">Passed filter</span><span class="ps-val" id="pstat-pass">—</span></div>
+    <div class="ps-row"><span class="ps-label">Elapsed</span>      <span class="ps-val" id="pstat-elap">—</span></div>
+    <div class="ps-row"><span class="ps-label">Est. remaining</span><span class="ps-val" id="pstat-eta">—</span></div>
   </div>
 
   <div class="load-steps">
-    <div class="load-step">&#8250; Stage 1: Price + volume pre-filter (1,500+ tickers, ~60s)</div>
-    <div class="load-step">&#8250; Stage 2: Pull live options chains on tickers that pass</div>
-    <div class="load-step">&#8250; Calculate IV rank from 1yr realized vol range</div>
-    <div class="load-step">&#8250; Select ~30-delta put strike, compute premium + ROC</div>
-    <div class="load-step">&#8250; Check earnings dates (3 sources: Yahoo Finance, yfinance, Nasdaq)</div>
-    <div class="load-step">&#8250; Rate STRONG / DECENT / SKIP &mdash; results stream in live</div>
+    <div class="load-step">&#8250; Stage 1: Price + volume check on 1,500+ tickers</div>
+    <div class="load-step">&#8250; Stage 2: Live options chains on tickers that pass</div>
+    <div class="load-step">&#8250; IV rank from 1yr realized vol · ~30-delta put strike</div>
+    <div class="load-step">&#8250; Earnings checked: yfinance calendar + Nasdaq API</div>
+    <div class="load-step">&#8250; Results stream in live — STRONG / DECENT / SKIP</div>
   </div>
 </div>
 
-<!-- ── Results ────────────────────────────────────────────── -->
-<div id="csp-results" style="display:none"></div>
-
-<!-- ── Error ──────────────────────────────────────────────── -->
+<div id="csp-results"></div>
 <div id="csp-error"></div>
-
-<!-- ── Empty ──────────────────────────────────────────────── -->
 <div id="csp-empty">
   <div style="font-size:28px;margin-bottom:12px;opacity:.3">&#11042;</div>
   <div style="font-size:13px;color:var(--muted)">No results match your filter</div>
 </div>
+<div id="csp-status-bar"></div>
 
-<!-- ── Status bar ─────────────────────────────────────────── -->
-<div id="csp-status-bar" style="display:none"></div>
-
-<!-- ── Playbook ───────────────────────────────────────────── -->
+<!-- Playbook -->
 <div id="playbook" style="display:none">
   <div class="pb-intro">
-    <strong style="color:var(--green)">Strategy: Cash-Secured Put (CSP) &mdash; The Wheel</strong><br>
-    Sell an out-of-the-money put at ~30-delta with 30&ndash;50 DTE when IV rank is elevated (&gt;50%).
-    Collect premium now, buy stock at a discount if assigned. Then sell covered calls &mdash; repeat.
+    <strong style="color:var(--green)">Strategy: Cash-Secured Put (CSP)</strong><br>
+    Sell an OTM put at ~30-delta with 30–50 DTE when IV rank is elevated (&gt;50%).
+    Collect premium. If assigned, sell covered calls (the Wheel) until called away.
   </div>
-
   <div class="pb-section">
-    <div class="pb-title" style="color:var(--green)">Three Entry Conditions</div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--green)">&#8250;</span><span><span class="pb-tag" style="background:#00e87a14;color:var(--green);border:1px solid #00e87a28">STRONG &mdash; IV Rank &ge; 60%</span>Options are rich relative to 1-year realized vol. Best premium collection environment.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--blue)">&#8250;</span><span><span class="pb-tag" style="background:#38b6ff14;color:var(--blue);border:1px solid #38b6ff28">DECENT &mdash; IV Rank 45&ndash;59%</span>Acceptable premium. Verify technical support at the strike before entering.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">SKIP &mdash; IV Rank &lt; 45%</span>Premium too thin relative to risk. Earnings within expiry = automatic SKIP.</span></div>
+    <div class="pb-title" style="color:var(--green)">Entry Conditions</div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--green)">&#8250;</span><span><span class="pb-tag" style="background:#00e87a14;color:var(--green);border:1px solid #00e87a28">STRONG ≥ 60% IV rank</span>Options rich vs 1yr realized vol. Best premium environment.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--blue)">&#8250;</span><span><span class="pb-tag" style="background:#38b6ff14;color:var(--blue);border:1px solid #38b6ff28">DECENT 45–59%</span>Acceptable. Verify technical support at the strike first.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">SKIP &lt; 45%</span>Premium too thin. Earnings conflict = automatic SKIP.</span></div>
   </div>
-
   <div class="pb-section">
     <div class="pb-title" style="color:var(--blue)">Trade Execution</div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#ffffff10;color:var(--text);border:1px solid #ffffff20">Structure</span>Sell to Open 1+ put contract(s). Cash-secured: keep full collateral (strike &times; 100) in account.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#ffffff10;color:var(--text);border:1px solid #ffffff20">Strike</span>~30-delta put. Out-of-the-money, typically 5&ndash;15% below current price. Should be near technical support.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#ffffff10;color:var(--text);border:1px solid #ffffff20">Expiry</span>30&ndash;50 DTE. Sweet spot for theta decay without excessive overnight-event risk.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#ffffff10;color:var(--text);border:1px solid #ffffff20">Take Profit</span>Close at 50% of premium collected. Do not hold to expiry.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#ffffff10;color:var(--text);border:1px solid #ffffff20">Stop Loss</span>Close at 2&times; premium paid (200% loss on position).</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#fff1;color:var(--text);border:1px solid #fff2">Strike</span>~30-delta put. Typically 5–15% OTM. Must be near chart support.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#fff1;color:var(--text);border:1px solid #fff2">Expiry</span>30–50 DTE. Best theta decay without excessive gap risk.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#fff1;color:var(--text);border:1px solid #fff2">Take Profit</span>50% of premium. Do NOT hold to expiry.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#fff1;color:var(--text);border:1px solid #fff2">Stop Loss</span>2× premium collected.</span></div>
   </div>
-
-  <div class="pb-section">
-    <div class="pb-title" style="color:var(--yellow)">The Wheel (If Assigned)</div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--yellow)">&#8250;</span><span><strong>Layer 3:</strong> You now own 100 shares at the put strike. Your effective cost basis = strike &minus; premium collected.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--yellow)">&#8250;</span><span>Immediately sell a <strong>covered call</strong> at or slightly above your cost basis, 30&ndash;45 DTE. Collect more premium.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--yellow)">&#8250;</span><span>Repeat monthly. Each cycle lowers your breakeven by 1&ndash;3%. Stock called away = full profit on the trade cycle.</span></div>
-  </div>
-
   <div class="pb-section">
     <div class="pb-title" style="color:var(--red)">Critical Rules</div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Earnings</span>NEVER sell a CSP that expires after an earnings date. Earnings = gap risk. Skip and re-enter post-earnings.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Spread</span>Bid/ask spread &gt; 15% = avoid. Wide spreads mean poor fills and illiquid options.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Support</span>Always verify the strike is near a chart support level. IV rank is not a substitute for technical analysis.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Sizing</span>Max 5&ndash;10% of portfolio per position. Collateral requirements limit natural position sizing.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Earnings</span>Never sell a CSP that expires after an earnings date. Gap risk is unlimited.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Spread</span>Bid/ask spread &gt; 20% = skip. Poor liquidity = bad fills.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Sizing</span>Max 5–10% of portfolio per position (collateral limits natural sizing).</span></div>
   </div>
-
-  <div class="pb-section">
-    <div class="pb-title" style="color:var(--purple)">How This Scanner Works</div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span>Scans 1,500+ tickers from S&amp;P 500/400/600 + NASDAQ-100 + liquid ETFs and high-vol names.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span>Stage 1 pre-filter: removes anything below $2 or under 250k avg volume (&lt;0.1s/ticker).</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span>Stage 2 scoring: pulls live options chains, calculates IV rank from 1yr realized vol, selects ~30-delta put strike.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span>Earnings dates cross-checked across 3 sources: Yahoo Finance API, yfinance calendar, and Nasdaq earnings calendar.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span>Results stream in live during the scan — you don't have to wait for completion to start reviewing setups.</span></div>
-  </div>
-
-  <div class="disclaimer">FOR EDUCATIONAL PURPOSES ONLY &middot; NOT FINANCIAL ADVICE<br>ALWAYS VERIFY DATA AND SUPPORT LEVELS BEFORE TRADING</div>
+  <div class="disclaimer">FOR EDUCATIONAL PURPOSES ONLY &middot; NOT FINANCIAL ADVICE<br>ALWAYS VERIFY BEFORE TRADING</div>
 </div>
 ```
 
@@ -305,23 +261,51 @@
 </div><!-- /app -->
 
 <script>
-  // ── SET YOUR BACKEND URL HERE ─────────────────────────────────────────────
+  // ─── CONFIG ───────────────────────────────────────────────────────────────
   const API_BASE = "https://vv-scanner-production.up.railway.app";
   // ─────────────────────────────────────────────────────────────────────────
 
-  let cspResults   = [];
-  let cspFilter    = "all";
-  let cspExpanded  = new Set();
-  let cspProgInt   = null;
-  let activeTab    = "scan";
-  let scanDone     = false;
-  let lastFoundCnt = 0;
+  var cspResults   = [];
+  var cspFilter    = "all";
+  var cspExpanded  = {};         // {ticker: true/false}
+  var cspProgInt   = null;
+  var connInt      = null;       // connection timer interval
+  var activeTab    = "scan";
+  var scanDone     = false;
+  var lastFound    = 0;
+  var connecting   = true;       // true until first successful fetch
+  var connStart    = Date.now();
 
   // ── Boot ──────────────────────────────────────────────────────────────────
-  window.addEventListener("DOMContentLoaded", () => {
+  window.addEventListener("DOMContentLoaded", function() {
     setTab("scan");
+    startConnTimer();
     loadCSP();
   });
+
+  // Connection elapsed timer (shows seconds while waiting for server)
+  function startConnTimer() {
+    connStart = Date.now();
+    if (connInt) clearInterval(connInt);
+    connInt = setInterval(function() {
+      if (!connecting) { clearInterval(connInt); return; }
+      var s = Math.floor((Date.now() - connStart) / 1000);
+      var el = document.getElementById("conn-timer");
+      if (el) el.textContent = s + "s";
+      // Update dots animation
+      var d = document.getElementById("conn-dots");
+      if (d) {
+        var dots = ["&#9679; &nbsp; &nbsp;","&#9679; &#9679; &nbsp;","&#9679; &#9679; &#9679;"];
+        d.innerHTML = dots[Math.floor(s/1) % 3];
+      }
+    }, 500);
+  }
+
+  function stopConnTimer() {
+    connecting = false;
+    if (connInt) { clearInterval(connInt); connInt = null; }
+    document.getElementById("conn-status").style.display = "none";
+  }
 
   // ── Tab switching ─────────────────────────────────────────────────────────
   function setTab(t) {
@@ -332,72 +316,49 @@
     document.getElementById("playbook").style.display      = t === "playbook" ? "" : "none";
 
     if (t === "scan") {
-      if (!scanDone && !cspResults.length) {
-        showCspLoading();
+      if (cspResults.length) {
+        document.getElementById("csp-loading").style.display    = "none";
+        document.getElementById("csp-results").style.display    = "";
+        document.getElementById("csp-status-bar").style.display = "";
       } else {
-        hideCspLoading();
-        renderCSP();
-        document.getElementById("csp-status-bar").style.display = cspResults.length ? "" : "none";
+        document.getElementById("csp-loading").style.display    = "";
+        document.getElementById("csp-results").style.display    = "none";
+        document.getElementById("csp-status-bar").style.display = "none";
       }
     } else {
-      // Hide all scan UI when on playbook
-      hideCspLoading();
+      document.getElementById("csp-loading").style.display    = "none";
       document.getElementById("csp-results").style.display    = "none";
       document.getElementById("csp-status-bar").style.display = "none";
     }
   }
 
-  // ── CSP Load + Poll ───────────────────────────────────────────────────────
-  async function loadCSP() {
-    showCspLoading();
-
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        const res  = await fetch(API_BASE + "/api/csp/scan", { signal: AbortSignal.timeout(20000) });
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        const data = await res.json();
-
-        if (data.results && data.results.length > 0) {
-          cspResults = data.results;
-          if (activeTab === "scan") renderCSP();
-          updateStatusBar(data);
-        }
-
-        if (data.isRefreshing || (data.progress && data.progress.phase !== "done")) {
-          startProgPoll();
-          pollCSP();
-        } else {
-          stopProgPoll();
-          scanDone = true;
-          hideCspLoading();
-          if (activeTab === "scan") {
-            renderCSP();
-            document.getElementById("csp-status-bar").style.display = "";
-          }
-        }
-        return;
-
-      } catch (e) {
-        const titleEl = document.getElementById("load-title");
-        if (titleEl) titleEl.textContent = "Waking up server... (" + (attempt + 1) + "/5)";
-        await sleep(attempt < 2 ? 6000 : 10000);
-      }
-    }
-
-    // All retries failed
-    showCspError(
-      "Could not reach server. Railway may be starting up (usually 30-60s).",
-      true
-    );
+  // ── Fetch with manual timeout (Safari-compatible) ─────────────────────────
+  // AbortSignal.timeout() is NOT supported in Safari < 16.4 / iOS < 16.4
+  // We use AbortController + setTimeout instead.
+  function fetchWithTimeout(url, timeoutMs) {
+    var controller = new AbortController();
+    var tid = setTimeout(function() { controller.abort(); }, timeoutMs);
+    return fetch(url, { signal: controller.signal })
+      .then(function(r) { clearTimeout(tid); return r; })
+      .catch(function(e) { clearTimeout(tid); throw e; });
   }
 
-  async function pollCSP() {
-    for (let i = 0; i < 90; i++) {
-      await sleep(6000);
+  // ── Main load + retry loop ─────────────────────────────────────────────────
+  // Retries indefinitely — no hard limit. Railway cold start can take 60-90s.
+  async function loadCSP() {
+    showLoading();
+
+    var attempt = 0;
+    while (true) {
+      attempt++;
       try {
-        const res  = await fetch(API_BASE + "/api/csp/scan");
-        if (!res.ok) continue;
-        const data = await res.json();
+        var res = await fetchWithTimeout(API_BASE + "/api/csp/scan", 30000);
+
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var data = await res.json();
+
+        // ── Success: server is up ──────────────────────────────────────
+        stopConnTimer();
 
         if (data.results && data.results.length > 0) {
           cspResults = data.results;
@@ -405,23 +366,108 @@
           updateStatusBar(data);
         }
 
-        if (!data.isRefreshing && data.progress && data.progress.phase === "done") {
+        var stillRunning = data.isRefreshing ||
+          (data.progress && data.progress.phase !== "done" && data.progress.phase !== "idle");
+
+        if (stillRunning) {
+          // Scan is in progress — show progress screen and keep polling
+          document.getElementById("csp-loading").style.display = "";
+          startProgPoll();
+          pollCSP();
+        } else if (data.results && data.results.length > 0) {
+          // Scan done, results already rendered
+          document.getElementById("csp-loading").style.display = "none";
+          document.getElementById("csp-status-bar").style.display = "";
+          scanDone = true;
+        } else {
+          // Server up but no scan started yet — trigger one and poll
+          document.getElementById("csp-loading").style.display = "";
+          startProgPoll();
+          pollCSP();
+        }
+        return; // exit retry loop
+
+      } catch (e) {
+        // Failed — update message and retry after delay
+        var elapsed = Math.floor((Date.now() - connStart) / 1000);
+        var titleEl = document.getElementById("load-title");
+        var subEl   = document.getElementById("load-sub");
+        if (attempt <= 2) {
+          if (titleEl) titleEl.textContent = "Connecting to server...";
+          if (subEl)   subEl.textContent   = "Attempt " + attempt;
+        } else {
+          if (titleEl) titleEl.textContent = "Server is starting up...";
+          if (subEl)   subEl.textContent   = "Railway takes ~60s after inactivity. Elapsed: " + elapsed + "s";
+        }
+
+        // After 3 minutes, show a "Try Again" button but keep retrying
+        if (elapsed > 180) {
+          showRetryButton();
+        }
+
+        var delay = attempt <= 3 ? 5000 : 10000;
+        await sleep(delay);
+      }
+    }
+  }
+
+  function showRetryButton() {
+    var errEl = document.getElementById("csp-error");
+    errEl.style.display = "";
+    errEl.innerHTML =
+      "<div style='background:#0c1018;border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center;margin-top:8px'>" +
+        "<div style='color:var(--muted);font-size:12px;margin-bottom:12px;line-height:1.6'>" +
+          "Taking longer than expected.<br>You can reload the page or the scan may still be starting." +
+        "</div>" +
+        "<button onclick='window.location.reload()' style='background:var(--green);border:none;border-radius:8px;color:#000;font-weight:800;padding:10px 24px;font-size:13px;cursor:pointer'>&#8635; Reload Page</button>" +
+      "</div>";
+  }
+
+  // ── Result poller (once connected, checks every 6s) ───────────────────────
+  async function pollCSP() {
+    for (var i = 0; i < 120; i++) {
+      await sleep(6000);
+      try {
+        var res  = await fetchWithTimeout(API_BASE + "/api/csp/scan", 15000);
+        if (!res.ok) continue;
+        var data = await res.json();
+
+        if (data.results && data.results.length > 0) {
+          cspResults = data.results;
+          if (activeTab === "scan") renderCSP();
+          updateStatusBar(data);
+          // Hide loading screen once we have results streaming in
+          if (document.getElementById("csp-results").innerHTML) {
+            // Keep loading bar visible at top — don't hide it yet
+          }
+        }
+
+        var done = !data.isRefreshing &&
+          data.progress && data.progress.phase === "done";
+
+        if (done) {
           stopProgPoll();
           scanDone = true;
-          hideCspLoading();
-          if (activeTab === "scan") {
-            renderCSP();
-            document.getElementById("csp-status-bar").style.display = "";
-          }
+          document.getElementById("csp-loading").style.display = "none";
+          document.getElementById("csp-results").style.display = "";
+          document.getElementById("csp-status-bar").style.display = "";
+          if (activeTab === "scan") renderCSP();
           return;
         }
       } catch (e) {
-        await sleep(4000);
+        // Transient error — keep polling
       }
     }
+    // Timeout after 120 polls (12 mins) — just hide the loading screen
     stopProgPoll();
+    document.getElementById("csp-loading").style.display = "none";
+    if (cspResults.length) {
+      document.getElementById("csp-results").style.display = "";
+      document.getElementById("csp-status-bar").style.display = "";
+    }
   }
 
+  // ── Progress bar poller ───────────────────────────────────────────────────
   function startProgPoll() {
     stopProgPoll();
     cspProgInt = setInterval(updateProgress, 2000);
@@ -434,88 +480,87 @@
 
   async function updateProgress() {
     try {
-      const p = await fetch(API_BASE + "/api/csp/progress").then(r => r.json());
+      var res = await fetchWithTimeout(API_BASE + "/api/csp/progress", 8000);
+      if (!res.ok) return;
+      var p = await res.json();
 
-      const titleEl   = document.getElementById("load-title");
-      const wrapEl    = document.getElementById("prog-wrap");
-      const barEl     = document.getElementById("prog-bar");
-      const pctEl     = document.getElementById("prog-pct");
-      const foundEl   = document.getElementById("prog-found");
-      const tickerEl  = document.getElementById("prog-ticker");
-      const statsEl   = document.getElementById("prog-stats");
-      const univEl    = document.getElementById("pstat-universe");
-      const passEl    = document.getElementById("pstat-passed");
-      const elapsEl   = document.getElementById("pstat-elapsed");
-      const etaEl     = document.getElementById("pstat-eta");
+      var titleEl  = document.getElementById("load-title");
+      var subEl    = document.getElementById("load-sub");
+      var progWrap = document.getElementById("prog-wrap");
+      var barEl    = document.getElementById("prog-bar");
+      var pctEl    = document.getElementById("prog-pct");
+      var foundEl  = document.getElementById("prog-found");
+      var tickerEl = document.getElementById("prog-ticker");
+      var statsEl  = document.getElementById("prog-stats");
 
       if (titleEl) titleEl.textContent = p.phaseLabel || "Scanning...";
+      if (subEl)   subEl.textContent   = "";
 
       if (p.total > 0) {
-        wrapEl.style.display = "";
-        barEl.style.width    = p.pct + "%";
-        pctEl.textContent    = p.done.toLocaleString() + " / " + p.total.toLocaleString() + " tickers  (" + p.pct + "%)";
+        progWrap.style.display = "";
+        barEl.style.width = p.pct + "%";
+        pctEl.textContent = p.done.toLocaleString() + " / " + p.total.toLocaleString() + " tickers (" + p.pct + "%)";
       }
 
-      // Found count + flash if new results came in
       if (p.found > 0) {
+        var isNew = p.found > lastFound;
+        lastFound = p.found;
         foundEl.style.display = "";
-        const isNew = p.found > lastFoundCnt;
-        lastFoundCnt = p.found;
         foundEl.innerHTML = "&#10003; " + p.found + " setup" + (p.found !== 1 ? "s" : "") + " found" +
           (isNew ? " <span class='live-badge'>NEW</span>" : "");
       }
 
-      // Current ticker
-      if (p.currentTicker && p.phase === "scoring") {
+      if (p.currentTicker && (p.phase === "scoring" || p.phase === "pre-filter")) {
         tickerEl.style.display = "";
-        tickerEl.textContent   = "⟳  Scoring: " + p.currentTicker;
-      } else if (p.currentTicker && p.phase === "pre-filter") {
-        tickerEl.style.display = "";
-        tickerEl.textContent   = "⟳  Checking: " + p.currentTicker;
+        tickerEl.textContent   = (p.phase === "scoring" ? "&#9670; Scoring: " : "&#9675; Checking: ") + p.currentTicker;
       } else {
         tickerEl.style.display = "none";
       }
 
-      // Stats panel
       if (p.phase === "scoring" || p.phase === "pre-filter") {
         statsEl.style.display = "";
-        if (univEl)  univEl.textContent  = (p.universe || "—").toLocaleString() + " tickers";
-        if (passEl)  passEl.textContent  = p.passed > 0 ? p.passed.toLocaleString() + " tickers" : "—";
-        if (elapsEl) elapsEl.textContent = p.elapsed > 0 ? fmtTime(p.elapsed) : "—";
-        if (etaEl)   etaEl.textContent   = p.eta   > 0  ? "~" + fmtTime(p.eta)  : (p.phase === "pre-filter" ? "calculating..." : "—");
+        var univEl = document.getElementById("pstat-univ");
+        var passEl = document.getElementById("pstat-pass");
+        var elapEl = document.getElementById("pstat-elap");
+        var etaEl  = document.getElementById("pstat-eta");
+        if (univEl) univEl.textContent = (p.universe||"—").toLocaleString() + " tickers";
+        if (passEl) passEl.textContent = p.passed > 0 ? p.passed.toLocaleString() + " tickers" : "—";
+        if (elapEl) elapEl.textContent = p.elapsed > 0 ? fmtTime(p.elapsed) : "—";
+        if (etaEl)  etaEl.textContent  = p.eta > 0 ? "~" + fmtTime(p.eta) : "calculating...";
       }
 
-    } catch (e) { /* ignore progress fetch errors silently */ }
+    } catch (e) { /* silently ignore progress fetch errors */ }
   }
 
-  function fmtTime(secs) {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return m > 0 ? m + "m " + s + "s" : s + "s";
+  function fmtTime(s) {
+    var m = Math.floor(s/60);
+    return m > 0 ? m + "m " + (s%60) + "s" : s + "s";
   }
 
-  // ── Refresh ───────────────────────────────────────────────────────────────
+  // ── Refresh button ────────────────────────────────────────────────────────
   async function doRefresh() {
-    const icon  = document.getElementById("refresh-icon");
-    const label = document.getElementById("refresh-label");
-    const btn   = document.getElementById("refresh-btn");
+    var icon  = document.getElementById("refresh-icon");
+    var label = document.getElementById("refresh-label");
+    var btn   = document.getElementById("refresh-btn");
     icon.classList.add("spin");
     label.textContent = "Scanning...";
     btn.disabled = true;
 
     try {
-      await fetch(API_BASE + "/api/csp/refresh", { method: "POST" });
-      cspResults   = [];
-      cspExpanded  = new Set();
-      scanDone     = false;
-      lastFoundCnt = 0;
+      var res = await fetchWithTimeout(API_BASE + "/api/csp/refresh", 15000);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      cspResults  = [];
+      cspExpanded = {};
+      scanDone    = false;
+      lastFound   = 0;
+      document.getElementById("csp-results").innerHTML    = "";
       document.getElementById("csp-results").style.display    = "none";
       document.getElementById("csp-status-bar").style.display = "none";
-      showCspLoading();
+      showLoading();
       startProgPoll();
       pollCSP();
     } catch (e) {
-      showCspError("Refresh failed: " + e.message, true);
+      alert("Refresh failed: " + e.message + "\nCheck your connection and try again.");
     } finally {
       icon.classList.remove("spin");
       label.textContent = "Refresh";
@@ -523,11 +568,11 @@
     }
   }
 
-  // ── Filter ────────────────────────────────────────────────────────────────
+  // ── Filter pills ──────────────────────────────────────────────────────────
   function setCspFilter(f) {
     cspFilter = f;
-    ["all","strong","decent","skip"].forEach(id => {
-      const el = document.getElementById("cpill-" + id);
+    ["all","strong","decent","skip"].forEach(function(id) {
+      var el = document.getElementById("cpill-" + id);
       if (!el) return;
       el.className = "fpill" + (f === id ? " active-" + id : "");
     });
@@ -536,16 +581,16 @@
 
   // ── Render cards ──────────────────────────────────────────────────────────
   function renderCSP() {
-    const el = document.getElementById("csp-results");
-    const emptyEl = document.getElementById("csp-empty");
+    var el      = document.getElementById("csp-results");
+    var emptyEl = document.getElementById("csp-empty");
 
     if (!cspResults.length) {
-      el.style.display = "none";
+      el.style.display      = "none";
       emptyEl.style.display = "";
       return;
     }
 
-    const filtered = cspResults.filter(r => {
+    var filtered = cspResults.filter(function(r) {
       if (cspFilter === "strong") return r.quality === "STRONG";
       if (cspFilter === "decent") return r.quality === "DECENT";
       if (cspFilter === "skip")   return r.quality === "SKIP";
@@ -553,51 +598,53 @@
     });
 
     emptyEl.style.display = filtered.length ? "none" : "";
-    el.style.display = filtered.length ? "" : "none";
-    el.innerHTML = filtered.map((r, i) => cspCardHTML(r, i)).join("");
+    el.style.display      = filtered.length ? "" : "none";
+    el.innerHTML          = filtered.map(function(r, i) { return cspCardHTML(r, i); }).join("");
 
-    // Update filter pill counts
-    const s = cspResults.filter(r => r.quality==="STRONG").length;
-    const d = cspResults.filter(r => r.quality==="DECENT").length;
-    const sk = cspResults.filter(r => r.quality==="SKIP").length;
-    const allEl    = document.getElementById("cpill-all");
-    const strongEl = document.getElementById("cpill-strong");
-    const decentEl = document.getElementById("cpill-decent");
-    const skipEl   = document.getElementById("cpill-skip");
+    // Update pill counts
+    var s  = cspResults.filter(function(r){ return r.quality==="STRONG"; }).length;
+    var d  = cspResults.filter(function(r){ return r.quality==="DECENT"; }).length;
+    var sk = cspResults.filter(function(r){ return r.quality==="SKIP"; }).length;
+    var allEl    = document.getElementById("cpill-all");
+    var strongEl = document.getElementById("cpill-strong");
+    var decentEl = document.getElementById("cpill-decent");
+    var skipEl   = document.getElementById("cpill-skip");
     if (allEl)    allEl.textContent    = "All (" + cspResults.length + ")";
-    if (strongEl) strongEl.textContent = "★ " + s + " Strong";
-    if (decentEl) decentEl.textContent = "◆ " + d + " Decent";
-    if (skipEl)   skipEl.textContent   = "○ " + sk + " Skip";
+    if (strongEl) strongEl.textContent = "\u2605 " + s + " Strong";
+    if (decentEl) decentEl.textContent = "\u25c6 " + d + " Decent";
+    if (skipEl)   skipEl.textContent   = "\u25cb " + sk + " Skip";
   }
 
+  // ── Card HTML ─────────────────────────────────────────────────────────────
   function cspCardHTML(r, i) {
-    const qualMap = {
-      STRONG: { color:"var(--green)",  bg:"#001a0d", label:"&#9733; STRONG"  },
-      DECENT: { color:"var(--blue)",   bg:"#001020", label:"&#9670; DECENT"  },
-      SKIP:   { color:"var(--red)",    bg:"#1a0208", label:"&#9675; SKIP"    },
+    var qualMap = {
+      STRONG: { color:"var(--green)", bg:"#001a0d", label:"\u2605 STRONG" },
+      DECENT: { color:"var(--blue)",  bg:"#001020", label:"\u25c6 DECENT" },
+      SKIP:   { color:"var(--red)",   bg:"#1a0208", label:"\u25cb SKIP"   },
     };
-    const q   = qualMap[r.quality] || qualMap.SKIP;
-    const exp = cspExpanded.has(r.ticker);
-    const ivColor = r.ivRank >= 60 ? "var(--green)" : r.ivRank >= 45 ? "var(--yellow)" : "var(--red)";
-    const delay   = (Math.min(i, 20) * 0.04) + "s";
+    var q       = qualMap[r.quality] || qualMap.SKIP;
+    var isOpen  = !!cspExpanded[r.ticker];
+    var ivColor = r.ivRank >= 60 ? "var(--green)" : r.ivRank >= 45 ? "var(--yellow)" : "var(--red)";
+    var delay   = (Math.min(i, 15) * 0.04) + "s";
 
-    const earnWarn = r.earningsWithin
-      ? "<span style='color:var(--red);font-size:10px;font-weight:700'>&#9888; Earnings within expiry — avoid</span>"
-      : r.earningsDate && r.earningsDays != null
-        ? "<span style='color:var(--yellow);font-size:10px'>Earnings: " + r.earningsDate + " (" + r.earningsDays + "d)</span>"
-        : "<span style='color:var(--dim);font-size:10px'>No earnings confirmed in window</span>";
+    var earnLine = r.earningsWithin
+      ? "<span style='color:var(--red);font-size:10px;font-weight:700'>\u26a0 Earnings within expiry</span>"
+      : (r.earningsDate && r.earningsDays != null
+          ? "<span style='color:var(--yellow);font-size:10px'>Earnings: " + r.earningsDate + " (" + r.earningsDays + "d)</span>"
+          : "<span style='color:var(--dim);font-size:10px'>No earnings confirmed in window</span>");
 
-    let html = "<div class='csp-card " + r.quality.toLowerCase() + (exp ? " open" : "") +
-      "' onclick='toggleCsp(\"" + r.ticker + "\")' style='animation-delay:" + delay + "'>" +
+    var html =
+      "<div class='csp-card " + r.quality.toLowerCase() + (isOpen ? " open" : "") +
+        "' onclick='toggleCsp(\"" + r.ticker + "\")' style='animation-delay:" + delay + "'>" +
       "<div class='csp-header'>" +
         "<div class='csp-top'>" +
           "<div class='ticker-badge' style='background:" + q.bg + ";border:1px solid " + q.color + "33'>" +
             "<div class='ticker-sym'>" + r.ticker + "</div>" +
-            "<div class='ticker-price' style='color:" + q.color + "'>$" + r.price.toLocaleString() + "</div>" +
+            "<div class='ticker-price' style='color:" + q.color + "'>$" + r.price + "</div>" +
           "</div>" +
           "<div class='stock-info'>" +
             "<div class='stock-name'>" + (r.name || r.ticker) + "</div>" +
-            "<div style='margin-top:3px'>" + earnWarn + "</div>" +
+            "<div style='margin-top:3px'>" + earnLine + "</div>" +
           "</div>" +
           "<div class='card-right'>" +
             "<span class='rec-badge' style='background:" + q.color + "22;color:" + q.color + ";border:1px solid " + q.color + "44'>" + q.label + "</span>" +
@@ -605,165 +652,115 @@
           "</div>" +
         "</div>" +
         "<div class='csp-metrics'>" +
-          "<div class='csp-metric'><div class='csp-metric-label'>IV Rank</div><div class='csp-metric-val' style='color:" + ivColor + "'>" + r.ivRank + "%</div></div>" +
-          "<div class='csp-metric'><div class='csp-metric-label'>Strike</div><div class='csp-metric-val' style='color:var(--yellow)'>$" + r.putStrike + "</div></div>" +
-          "<div class='csp-metric'><div class='csp-metric-label'>DTE</div><div class='csp-metric-val'>" + r.dte + "d</div></div>" +
-          "<div class='csp-metric'><div class='csp-metric-label'>Premium</div><div class='csp-metric-val' style='color:var(--green)'>$" + r.premium + "</div></div>" +
-          "<div class='csp-metric'><div class='csp-metric-label'>Breakeven</div><div class='csp-metric-val' style='color:var(--orange)'>$" + r.breakeven + "</div></div>" +
-          "<div class='csp-metric'><div class='csp-metric-label'>ROC</div><div class='csp-metric-val' style='color:var(--green)'>" + r.rocPct + "%</div></div>" +
+          metricHTML("IV Rank",  r.ivRank + "%",  ivColor) +
+          metricHTML("Strike",   "$" + r.putStrike, "var(--yellow)") +
+          metricHTML("DTE",      r.dte + "d",      "var(--bright)") +
+          metricHTML("Premium",  "$" + r.premium,  "var(--green)") +
+          metricHTML("Breakeven","$" + r.breakeven,"var(--orange)") +
+          metricHTML("ROC",      r.rocPct + "%",   "var(--green)") +
         "</div>" +
         "<div class='iv-bar-wrap'>" +
           "<span style='font-size:9px;color:var(--muted);width:52px;flex-shrink:0'>IV Rank</span>" +
           "<div class='iv-bar-track'><div class='iv-bar-fill' style='width:" + Math.min(100,r.ivRank) + "%;background:" + ivColor + "'></div></div>" +
           "<span style='font-size:10px;font-weight:700;color:" + ivColor + ";width:34px;text-align:right'>" + r.ivRank + "%</span>" +
         "</div>" +
-        "<div class='card-toggle'>" + (exp ? "&#8963; less" : "&#8964; trade details") + "</div>" +
+        "<div class='card-toggle'>" + (isOpen ? "\u2303 less" : "\u2304 trade details") + "</div>" +
       "</div>";
 
-    if (exp) {
-      const collateral    = r.putStrike * 100;
-      const l3Strike      = Math.round(r.putStrike * 1.03 / 5) * 5;
-      const profitDollars = r.profitTarget;
-      const stopDollars   = r.stopLoss;
-
-      const verdictText = r.quality === "STRONG"
-        ? "IV rank " + r.ivRank + "% with IV/RV ratio " + r.ivRvRatio + "x. Premium is rich vs historical vol. High-quality candidate — confirm technical support at strike."
+    if (isOpen) {
+      var coll      = r.putStrike * 100;
+      var l3Strike  = Math.round(r.putStrike * 1.03 / 5) * 5;
+      var verdictTx = r.quality === "STRONG"
+        ? "IV rank " + r.ivRank + "% with IV/RV " + r.ivRvRatio + "x. Premium is rich vs historical vol. Verify support at $" + r.putStrike + " before entering."
         : r.quality === "DECENT"
-        ? "IV rank " + r.ivRank + "% — acceptable but not exceptional. Verify support at $" + r.putStrike + " before entering."
+        ? "IV rank " + r.ivRank + "% \u2014 acceptable setup. Confirm support at strike and check spread before entering."
         : (r.earningsWithin
-            ? "Earnings (" + r.earningsDate + ") fall within the expiry window. Wait for post-earnings reset to enter."
-            : "IV rank below threshold (" + r.ivRank + "%) or spread too wide (" + r.spreadPct + "%). Skip this cycle.");
+            ? "Earnings (" + r.earningsDate + ") fall within expiry. Wait for post-earnings reset."
+            : "IV rank " + r.ivRank + "% or spread " + r.spreadPct + "% outside thresholds. Skip this cycle.");
 
-      html += "<div class='csp-body'>" +
-        "<div class='verdict' style='background:" + q.color + "0f;border:1px solid " + q.color + "25'>" +
-          "<strong style='color:" + q.color + "'>" + r.quality + ": </strong>" + verdictText +
-        "</div>" +
-        "<div class='csp-grid'>" +
-          "<div class='csp-block'>" +
-            "<div class='block-title' style='color:var(--yellow)'>&#9670; EXACT ORDER</div>" +
-            "<div style='font-size:12px;color:var(--text);line-height:1.9'>" +
-              "<span style='color:var(--muted)'>Action:</span> <strong style='color:var(--bright)'>Sell to Open 1 contract</strong><br>" +
+      html +=
+        "<div class='csp-body'>" +
+          "<div class='verdict' style='background:" + q.color + "0f;border:1px solid " + q.color + "25'>" +
+            "<strong style='color:" + q.color + "'>" + r.quality + ": </strong>" + verdictTx +
+          "</div>" +
+          "<div class='csp-grid'>" +
+            "<div class='csp-block'>" +
+              "<div class='block-title' style='color:var(--yellow)'>\u25c6 ORDER</div>" +
+              "<span style='color:var(--muted)'>Action:</span> <strong style='color:var(--bright)'>Sell to Open 1 put</strong><br>" +
               "<span style='color:var(--muted)'>Option:</span> <strong style='color:var(--yellow)'>" + r.ticker + " $" + r.putStrike + " Put</strong><br>" +
-              "<span style='color:var(--muted)'>Expiry:</span> <strong style='color:var(--bright)'>" + r.expiration + " (" + r.dte + " DTE)</strong><br>" +
-              "<span style='color:var(--muted)'>Price:</span> Limit at <strong style='color:var(--green)'>$" + r.premium + "</strong> (mid)<br>" +
-              "<span style='color:var(--muted)'>Bid/Ask:</span> $" + r.bid + " / $" + r.ask + " &middot; spread " + r.spreadPct + "%<br>" +
-              "<span style='color:var(--muted)'>Cash needed:</span> <strong>$" + collateral.toLocaleString() + " / contract</strong>" +
+              "<span style='color:var(--muted)'>Expiry:</span> <strong>" + r.expiration + " (" + r.dte + " DTE)</strong><br>" +
+              "<span style='color:var(--muted)'>Limit:</span> <strong style='color:var(--green)'>$" + r.premium + " (mid)</strong><br>" +
+              "<span style='color:var(--muted)'>B/A:</span> $" + r.bid + " / $" + r.ask + " \u00b7 " + r.spreadPct + "%<br>" +
+              "<span style='color:var(--muted)'>Cash:</span> <strong>$" + coll.toLocaleString() + "/contract</strong>" +
+            "</div>" +
+            "<div class='csp-block'>" +
+              "<div class='block-title' style='color:var(--green)'>\u0024 P&amp;L</div>" +
+              "<span style='color:var(--muted)'>Take profit:</span> <strong style='color:var(--green)'>$" + (r.premium * 0.5).toFixed(2) + " (+$" + r.profitTarget + ")</strong><br>" +
+              "<span style='color:var(--muted)'>Stop loss:</span> <strong style='color:var(--red)'>$" + (r.premium * 2).toFixed(2) + " (-$" + r.stopLoss + ")</strong><br>" +
+              "<span style='color:var(--muted)'>Breakeven:</span> <strong style='color:var(--orange)'>$" + r.breakeven + "</strong><br>" +
+              "<span style='color:var(--muted)'>ROC:</span> <strong style='color:var(--green)'>" + r.rocPct + "% / " + r.rocAnn + "% ann.</strong><br>" +
+              "<span style='color:var(--muted)'>IV/RV:</span> " + r.ivRvRatio + "x \u00b7 ATM " + r.atm_iv + "% \u00b7 RV " + r.rv30 + "%" +
             "</div>" +
           "</div>" +
-          "<div class='csp-block'>" +
-            "<div class='block-title' style='color:var(--green)'>&#36; P&amp;L TARGETS</div>" +
-            "<div style='font-size:12px;color:var(--text);line-height:1.9'>" +
-              "<span style='color:var(--muted)'>Take profit:</span> <strong style='color:var(--green)'>Close at $" + (r.premium * 0.5).toFixed(2) + " (+$" + profitDollars + "/contract)</strong><br>" +
-              "<span style='color:var(--muted)'>Stop loss:</span> <strong style='color:var(--red)'>Close at $" + (r.premium * 2).toFixed(2) + " (-$" + stopDollars + "/contract)</strong><br>" +
-              "<span style='color:var(--muted)'>Breakeven:</span> <strong style='color:var(--orange)'>$" + r.breakeven + "/share</strong><br>" +
-              "<span style='color:var(--muted)'>ROC:</span> <strong style='color:var(--green)'>" + r.rocPct + "% &middot; " + r.rocAnn + "% ann.</strong><br>" +
-              "<span style='color:var(--muted)'>IV/RV:</span> " + r.ivRvRatio + "x &middot; ATM IV " + r.atm_iv + "% &middot; RV30 " + r.rv30 + "%" +
-            "</div>" +
-          "</div>" +
-        "</div>" +
-
-        "<div class='trade-block'>" +
-          "<div class='block-title' style='color:var(--purple)'>&#9670; IV ANALYSIS</div>" +
-          "<div style='font-size:12px;color:var(--text);line-height:1.9'>" +
-            "<div style='display:flex;justify-content:space-between;margin-bottom:8px'>" +
-              "<span style='color:var(--muted)'>ATM IV (puts)</span>" +
-              "<strong style='color:" + ivColor + "'>" + r.atm_iv + "%</strong>" +
-            "</div>" +
-            "<div style='display:flex;justify-content:space-between;margin-bottom:8px'>" +
-              "<span style='color:var(--muted)'>30-day Realized Vol</span>" +
-              "<strong>" + r.rv30 + "%</strong>" +
-            "</div>" +
-            "<div style='display:flex;justify-content:space-between;margin-bottom:8px'>" +
-              "<span style='color:var(--muted)'>IV/RV Ratio</span>" +
-              "<strong style='color:" + (r.ivRvRatio >= 1.2 ? "var(--green)" : "var(--yellow)") + "'>" + r.ivRvRatio + "x</strong>" +
-            "</div>" +
-            "<div>" +
-              "<div style='display:flex;justify-content:space-between;margin-bottom:4px'>" +
-                "<span style='color:var(--muted);font-size:10px'>IV Rank (1yr range)</span>" +
-                "<span style='color:" + ivColor + ";font-weight:700;font-size:10px'>" + r.ivRank + "%</span>" +
-              "</div>" +
-              "<div style='background:var(--border);border-radius:3px;height:6px;overflow:hidden'>" +
-                "<div style='height:100%;width:" + Math.min(100,r.ivRank) + "%;background:" + ivColor + ";border-radius:3px'></div>" +
-              "</div>" +
-            "</div>" +
-          "</div>" +
-        "</div>" +
-
-        "<div class='trade-block'>" +
-          "<div class='block-title' style='color:var(--red)'>&#9888; IF ASSIGNED (Layer 3 — The Wheel)</div>" +
-          "<div style='font-size:12px;color:var(--text);line-height:1.9'>" +
-            "You own <strong>100 " + r.ticker + " shares</strong> at <strong>$" + r.putStrike + "</strong>.<br>" +
-            "Effective cost basis: <strong style='color:var(--orange)'>$" + r.breakeven + "</strong> (strike minus premium).<br>" +
-            "Sell a <strong style='color:var(--purple)'>$" + l3Strike + " covered call, 30&ndash;45 DTE</strong> immediately.<br>" +
-            "Repeat each month until called away or basis recovered.<br>" +
-            "<span style='color:var(--muted)'>Max loss: $" + r.breakeven + " &times; 100 = </span>" +
+          "<div class='trade-block'>" +
+            "<div class='block-title' style='color:var(--red)'>\u26a0 IF ASSIGNED \u2014 The Wheel</div>" +
+            "Own <strong>100 shares at $" + r.putStrike + "</strong> \u2014 cost basis <strong style='color:var(--orange)'>$" + r.breakeven + "</strong><br>" +
+            "Immediately sell <strong style='color:var(--purple)'>$" + l3Strike + " covered call, 30\u201345 DTE</strong><br>" +
+            "Repeat monthly. Each cycle lowers breakeven 1\u20133%.<br>" +
+            "<span style='color:var(--muted)'>Max loss: $" + r.breakeven + " \u00d7 100 = </span>" +
             "<strong style='color:var(--red)'>$" + (r.breakeven * 100).toLocaleString() + "</strong>" +
-            "<span style='color:var(--dim);font-size:10px'> (stock to zero)</span>" +
           "</div>" +
-        "</div>" +
-
-        (r.earningsWithin
-          ? "<div class='verify-note' style='color:var(--red)'>&#9888; Earnings within expiry — skip this cycle. Return after earnings are reported.</div>"
-          : "") +
-        "<div class='verify-note'>Live data via Yahoo Finance &middot; Earnings cross-checked: Yahoo Finance API + yfinance + Nasdaq calendar &middot; Always verify at your broker</div>" +
-      "</div>";
+          (r.earningsWithin
+            ? "<div class='verify-note' style='color:var(--red)'>\u26a0 Earnings within expiry window \u2014 skip this cycle.</div>"
+            : "") +
+          "<div class='verify-note'>Live data via Yahoo Finance \u00b7 Earnings: yfinance + Nasdaq calendar \u00b7 Always verify at your broker</div>" +
+        "</div>";
     }
 
     html += "</div>";
     return html;
   }
 
+  function metricHTML(label, val, color) {
+    return "<div class='csp-metric'>" +
+      "<div class='csp-ml'>" + label + "</div>" +
+      "<div class='csp-mv' style='color:" + color + "'>" + val + "</div>" +
+    "</div>";
+  }
+
   function toggleCsp(ticker) {
-    if (cspExpanded.has(ticker)) cspExpanded.delete(ticker);
-    else cspExpanded.add(ticker);
+    cspExpanded[ticker] = !cspExpanded[ticker];
     renderCSP();
   }
 
   // ── UI helpers ────────────────────────────────────────────────────────────
-  function showCspLoading() {
+  function showLoading() {
     document.getElementById("csp-loading").style.display    = "";
     document.getElementById("csp-results").style.display    = "none";
     document.getElementById("csp-error").style.display      = "none";
     document.getElementById("csp-empty").style.display      = "none";
     document.getElementById("csp-status-bar").style.display = "none";
     document.getElementById("playbook").style.display       = "none";
-  }
-
-  function hideCspLoading() {
-    document.getElementById("csp-loading").style.display = "none";
-  }
-
-  function showCspError(msg, showRetry) {
-    hideCspLoading();
-    const el = document.getElementById("csp-error");
-    el.style.display = "";
-    el.innerHTML =
-      "<div style='background:#1a0208;border:1px solid #ff445540;border-radius:10px;padding:20px;text-align:center;margin-top:20px'>" +
-        "<div style='font-size:22px;margin-bottom:10px'>&#9888;</div>" +
-        "<div style='color:var(--red);font-size:13px;font-weight:700;margin-bottom:8px'>Could not reach server</div>" +
-        "<div style='color:var(--muted);font-size:12px;margin-bottom:16px;line-height:1.6'>" + msg + "</div>" +
-        (showRetry
-          ? "<button onclick='loadCSP()' style='background:var(--green);border:none;border-radius:8px;color:#000;font-weight:800;padding:10px 28px;font-size:13px;cursor:pointer'>&#8635; Try Again</button>"
-          : "") +
-      "</div>";
+    document.getElementById("conn-status").style.display    = "";
   }
 
   function updateStatusBar(data) {
-    const el = document.getElementById("csp-status-bar");
-    const s  = (data.results || []).filter(r => r.quality === "STRONG").length;
-    const d  = (data.results || []).filter(r => r.quality === "DECENT").length;
-    const refreshing = data.isRefreshing
-      ? " &middot; <span style='color:var(--yellow);animation:pulse 1.5s infinite'>&#9679; Scanning...</span>"
+    var el = document.getElementById("csp-status-bar");
+    var s  = (data.results||[]).filter(function(r){ return r.quality==="STRONG"; }).length;
+    var d  = (data.results||[]).filter(function(r){ return r.quality==="DECENT"; }).length;
+    var scanning = data.isRefreshing
+      ? " &middot; <span style='color:var(--yellow);animation:pulse 1.5s infinite'>\u25cf Scanning...</span>"
       : "";
     el.innerHTML =
       "<strong style='color:var(--bright)'>" + s + " Strong</strong> &middot; " +
-      "<strong style='color:var(--blue)'>" + d + " Decent</strong> &middot; " +
-      "Universe: <strong>" + (data.universe || "?").toLocaleString() + "</strong>" + refreshing + "<br>" +
-      "Last scan: " + (data.scannedAt || "&mdash;") + "<br>" +
-      "Criteria: IV rank &gt; 45% &middot; ~30&delta; put &middot; 30&ndash;50 DTE &middot; no earnings in window";
+      "<strong style='color:var(--blue)'>" + d + " Decent</strong>" +
+      " &middot; Universe: <strong>" + (data.universe||0).toLocaleString() + "</strong>" + scanning + "<br>" +
+      "Last scan: " + (data.scannedAt || "\u2014") + "<br>" +
+      "IV rank &gt; 45% \u00b7 ~30\u03b4 put \u00b7 30\u201350 DTE \u00b7 no earnings in window";
+    el.style.display = "";
   }
 
-  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+  function sleep(ms) { return new Promise(function(r){ setTimeout(r, ms); }); }
 </script>
 
 </body>
