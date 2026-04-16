@@ -344,7 +344,8 @@
   }
 
   // ── Main load + retry loop ─────────────────────────────────────────────────
-  // Retries indefinitely — no hard limit. Railway cold start can take 60-90s.
+  // No timeout on the initial fetch — Railway needs up to 90s to wake AND respond.
+  // We show the elapsed timer so the user sees progress.
   async function loadCSP() {
     showLoading();
 
@@ -352,12 +353,13 @@
     while (true) {
       attempt++;
       try {
-        var res = await fetchWithTimeout(API_BASE + "/api/csp/scan", 30000);
+        // No AbortController timeout here — let it wait as long as needed
+        var res = await fetch(API_BASE + "/api/csp/scan");
 
         if (!res.ok) throw new Error("HTTP " + res.status);
         var data = await res.json();
 
-        // ── Success: server is up ──────────────────────────────────────
+        // ── Connected ──────────────────────────────────────────────────────
         stopConnTimer();
 
         if (data.results && data.results.length > 0) {
@@ -370,43 +372,45 @@
           (data.progress && data.progress.phase !== "done" && data.progress.phase !== "idle");
 
         if (stillRunning) {
-          // Scan is in progress — show progress screen and keep polling
           document.getElementById("csp-loading").style.display = "";
           startProgPoll();
           pollCSP();
         } else if (data.results && data.results.length > 0) {
-          // Scan done, results already rendered
-          document.getElementById("csp-loading").style.display = "none";
+          document.getElementById("csp-loading").style.display    = "none";
           document.getElementById("csp-status-bar").style.display = "";
           scanDone = true;
         } else {
-          // Server up but no scan started yet — trigger one and poll
+          // Server up but no scan running — trigger one
           document.getElementById("csp-loading").style.display = "";
+          try { await fetchWithTimeout(API_BASE + "/api/csp/refresh", 10000); } catch(e) {}
           startProgPoll();
           pollCSP();
         }
-        return; // exit retry loop
+        return;
 
       } catch (e) {
-        // Failed — update message and retry after delay
         var elapsed = Math.floor((Date.now() - connStart) / 1000);
         var titleEl = document.getElementById("load-title");
         var subEl   = document.getElementById("load-sub");
-        if (attempt <= 2) {
+        var msgEl   = document.getElementById("conn-msg");
+
+        if (elapsed < 30) {
           if (titleEl) titleEl.textContent = "Connecting to server...";
           if (subEl)   subEl.textContent   = "Attempt " + attempt;
+        } else if (elapsed < 120) {
+          if (titleEl) titleEl.textContent = "Server is waking up...";
+          if (subEl)   subEl.textContent   = "Railway cold start — usually under 60s";
+          if (msgEl)   msgEl.textContent   = "Scan will start automatically once connected.";
         } else {
-          if (titleEl) titleEl.textContent = "Server is starting up...";
-          if (subEl)   subEl.textContent   = "Railway takes ~60s after inactivity. Elapsed: " + elapsed + "s";
+          if (titleEl) titleEl.textContent = "Scan in progress...";
+          if (subEl)   subEl.textContent   = "Server is busy scanning. Still trying...";
+          if (msgEl)   msgEl.textContent   = "This can happen during a large scan. Please wait.";
         }
 
-        // After 3 minutes, show a "Try Again" button but keep retrying
-        if (elapsed > 180) {
-          showRetryButton();
-        }
+        if (elapsed > 300) showRetryButton();
 
-        var delay = attempt <= 3 ? 5000 : 10000;
-        await sleep(delay);
+        // Short delay between retries — don't wait 10s each time
+        await sleep(attempt <= 2 ? 3000 : 6000);
       }
     }
   }
@@ -448,6 +452,7 @@
         if (done) {
           stopProgPoll();
           scanDone = true;
+          onScanComplete();
           document.getElementById("csp-loading").style.display = "none";
           document.getElementById("csp-results").style.display = "";
           document.getElementById("csp-status-bar").style.display = "";
@@ -539,33 +544,55 @@
 
   // ── Refresh button ────────────────────────────────────────────────────────
   async function doRefresh() {
-    var icon  = document.getElementById("refresh-icon");
-    var label = document.getElementById("refresh-label");
-    var btn   = document.getElementById("refresh-btn");
+    var icon = document.getElementById("refresh-icon");
+    var label= document.getElementById("refresh-label");
+    var btn  = document.getElementById("refresh-btn");
+
+    // Ignore tap if already disabled / scanning
+    if (btn.disabled) return;
+
     icon.classList.add("spin");
-    label.textContent = "Scanning...";
+    label.textContent = "Starting...";
     btn.disabled = true;
 
     try {
-      var res = await fetchWithTimeout(API_BASE + "/api/csp/refresh", 15000);
-      if (!res.ok) throw new Error("HTTP " + res.status);
+      // 40s timeout — server may be waking up
+      var res = await fetchWithTimeout(API_BASE + "/api/csp/refresh", 40000);
+      // 200 = new scan started, 202 = already running — both are fine; anything else is an error
+      if (res.status !== 200 && res.status !== 202) throw new Error("HTTP " + res.status);
+
+      // Reset state and go into scan-watching mode
       cspResults  = [];
       cspExpanded = {};
       scanDone    = false;
       lastFound   = 0;
-      document.getElementById("csp-results").innerHTML    = "";
-      document.getElementById("csp-results").style.display    = "none";
-      document.getElementById("csp-status-bar").style.display = "none";
+      document.getElementById("csp-results").innerHTML         = "";
+      document.getElementById("csp-results").style.display     = "none";
+      document.getElementById("csp-status-bar").style.display  = "none";
+      document.getElementById("conn-status").style.display     = "none";
       showLoading();
+      document.getElementById("conn-status").style.display = "none"; // hide "waiting for server" box
       startProgPoll();
       pollCSP();
+
     } catch (e) {
-      alert("Refresh failed: " + e.message + "\nCheck your connection and try again.");
-    } finally {
+      // No alert — just log and reset the button silently.
+      // The scan may have already been running; pollCSP will catch up.
+      console.warn("Refresh request error (non-fatal):", e.message);
       icon.classList.remove("spin");
       label.textContent = "Refresh";
       btn.disabled = false;
     }
+    // Note: button stays disabled until onScanComplete() is called from pollCSP
+  }
+
+  function onScanComplete() {
+    var btn = document.getElementById("refresh-btn");
+    var icon= document.getElementById("refresh-icon");
+    var lbl = document.getElementById("refresh-label");
+    if (btn)  btn.disabled = false;
+    if (icon) icon.classList.remove("spin");
+    if (lbl)  lbl.textContent = "Refresh";
   }
 
   // ── Filter pills ──────────────────────────────────────────────────────────
