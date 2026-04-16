@@ -12,9 +12,10 @@
     :root {
       --bg:#060810; --card:#0c1018; --border:#161f2e; --borderhi:#1e2d44;
       --green:#00e87a; --blue:#38b6ff; --yellow:#f5c842; --red:#ff4455;
-      --purple:#a78bfa; --dim:#2d3d52; --muted:#506070; --text:#b8ccd8; --bright:#e8f2f8;
+      --purple:#a78bfa; --orange:#ff8c42; --dim:#2d3d52; --muted:#506070;
+      --text:#b8ccd8; --bright:#e8f2f8;
     }
-    *  { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+    * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
     body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code','Courier New',monospace; min-height:100vh; }
     button { cursor:pointer; border:none; background:none; font-family:inherit; }
     input  { outline:none; font-family:inherit; }
@@ -22,119 +23,81 @@
 ```
 @keyframes spin    { to { transform:rotate(360deg); } }
 @keyframes fadeUp  { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-@keyframes pulse   { 0%,100% { opacity:1; } 50% { opacity:.3; } }
+@keyframes pulse   { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+@keyframes blink   { 0%,100% { opacity:1; } 50% { opacity:0; } }
 
 #app { max-width:520px; margin:0 auto; }
 
-/* Header — pushes below status bar using safe-area-inset-top */
+/* ── Header ────────────────────────────────────────────────── */
 #header {
   background:#080c12ee;
   backdrop-filter:blur(12px);
   -webkit-backdrop-filter:blur(12px);
   border-bottom:1px solid var(--border);
   padding-top:calc(env(safe-area-inset-top) + 12px);
-  padding-left:14px;
-  padding-right:14px;
-  padding-bottom:10px;
-  position:sticky;
-  top:0;
-  z-index:100;
+  padding:calc(env(safe-area-inset-top) + 12px) 14px 10px;
+  position:sticky; top:0; z-index:100;
 }
 .header-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-.logo       { display:flex; align-items:center; gap:10px; }
-.logo-badge { width:30px; height:30px; background:linear-gradient(135deg,var(--green),var(--blue)); border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; color:#000; flex-shrink:0; }
-.logo-title { font-size:14px; font-weight:700; color:var(--bright); letter-spacing:.03em; }
-.logo-sub   { font-size:9px; color:var(--muted); letter-spacing:.08em; margin-top:1px; }
+.logo        { display:flex; align-items:center; gap:10px; }
+.logo-badge  { width:30px; height:30px; background:linear-gradient(135deg,var(--green),var(--blue)); border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; color:#000; flex-shrink:0; }
+.logo-title  { font-size:14px; font-weight:700; color:var(--bright); letter-spacing:.03em; }
+.logo-sub    { font-size:9px; color:var(--muted); letter-spacing:.08em; margin-top:1px; }
 #refresh-btn { background:#0f1f0f; border:1px solid var(--green); border-radius:8px; padding:7px 13px; color:var(--green); font-size:12px; font-weight:700; display:flex; align-items:center; gap:5px; transition:all .15s; }
 #refresh-btn:active { opacity:.7; transform:scale(.97); }
+#refresh-btn:disabled { opacity:.5; cursor:default; }
 .spin { display:inline-block; animation:spin .8s linear infinite; }
 
 .tabs { display:flex; gap:6px; margin-bottom:8px; }
 .tab  { flex:1; padding:7px 0; border-radius:7px; font-size:12px; font-weight:400; color:var(--muted); background:transparent; border:1px solid var(--border); transition:all .15s; }
 .tab.active { font-weight:700; color:var(--bright); background:var(--border); border-color:var(--dim); }
 
-.search-wrap { position:relative; margin-bottom:7px; }
-.search-icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--dim); font-size:15px; pointer-events:none; }
-#search      { width:100%; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--bright); font-size:13px; padding:8px 32px 8px 30px; transition:border-color .15s; }
-#search:focus { border-color:var(--blue); }
-.search-clear { position:absolute; right:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:18px; line-height:1; }
-
-.filters { display:flex; gap:5px; }
+.filters { display:flex; gap:5px; margin-bottom:0; }
 .fpill { flex:1; padding:5px 2px; border-radius:6px; font-size:10px; font-weight:400; color:var(--muted); background:transparent; border:1px solid var(--border); transition:all .15s; text-align:center; white-space:nowrap; }
-.fpill.active-all { color:var(--muted);  background:#ffffff10; border-color:var(--dim);    font-weight:700; }
-.fpill.active-rec { color:var(--green);  background:#00e87a15; border-color:#00e87a50; font-weight:700; }
-.fpill.active-con { color:var(--yellow); background:#f5c84215; border-color:#f5c84250; font-weight:700; }
-.fpill.active-av  { color:var(--red);    background:#ff445515; border-color:#ff445550; font-weight:700; }
+.fpill.active-all    { color:var(--muted);  background:#ffffff10; border-color:var(--dim);    font-weight:700; }
+.fpill.active-strong { color:var(--green);  background:#00e87a15; border-color:#00e87a50; font-weight:700; }
+.fpill.active-decent { color:var(--blue);   background:#38b6ff15; border-color:#38b6ff50; font-weight:700; }
+.fpill.active-skip   { color:var(--red);    background:#ff445515; border-color:#ff445550; font-weight:700; }
 
-#content { padding:12px 12px 48px; }
+#content { padding:12px 12px 60px; }
 
-#loading { text-align:center; padding:64px 20px; animation:fadeUp .3s ease; }
+/* ── Loading / progress screen ─────────────────────────────── */
+#csp-loading { text-align:center; padding:40px 20px 32px; animation:fadeUp .3s ease; }
 .spinner { width:36px; height:36px; border:3px solid var(--border); border-top:3px solid var(--green); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 16px; }
-.load-title { font-size:13px; color:var(--green); font-weight:600; margin-bottom:10px; }
-.load-step  { font-size:11px; color:var(--dim); margin-bottom:4px; }
-#progress-wrap { margin:12px 0 8px; }
-#progress-track { background:var(--border); border-radius:6px; height:6px; overflow:hidden; margin-bottom:6px; }
-#progress-bar   { height:100%; background:linear-gradient(90deg,var(--green),var(--blue)); border-radius:6px; width:0%; transition:width .5s ease; }
-#progress-label { font-size:11px; color:var(--muted); text-align:center; }
+.load-title { font-size:13px; color:var(--green); font-weight:700; margin-bottom:12px; min-height:18px; }
 
-.trade-card { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:10px; overflow:hidden; transition:border-color .2s,background .2s; animation:fadeUp .4s ease both; cursor:pointer; }
-.trade-card:active { transform:scale(.99); opacity:.9; }
-.trade-card.rec { border-color:#003320; }
-.trade-card.con { border-color:#332800; }
-.trade-card.av  { border-color:#1a0208; }
-.trade-card.open.rec { background:#001a0d; }
-.trade-card.open.con { background:#1a1500; }
-.trade-card.open.av  { background:#1a0408; }
+#prog-wrap { margin:0 0 14px; }
+#prog-track { background:var(--border); border-radius:6px; height:7px; overflow:hidden; margin-bottom:7px; }
+#prog-bar { height:100%; background:linear-gradient(90deg,var(--green),var(--blue)); border-radius:6px; width:0%; transition:width .6s ease; }
+#prog-pct { font-size:11px; color:var(--muted); }
 
-.card-header { padding:14px 14px 12px; }
-.card-top    { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px; }
-.ticker-badge { border-radius:8px; padding:6px 10px; text-align:center; min-width:52px; flex-shrink:0; }
-.ticker-sym   { font-size:15px; font-weight:800; color:var(--bright); letter-spacing:.02em; }
-.ticker-price { font-size:11px; font-weight:700; }
-.stock-info   { flex:1; margin:0 10px; }
-.stock-name   { font-size:13px; color:var(--text); font-weight:600; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.stock-sector { font-size:11px; color:var(--muted); }
-.card-right   { display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
-.rec-badge    { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:800; letter-spacing:.06em; }
-.earn-date    { font-size:11px; color:var(--muted); text-align:right; }
-.earn-soon    { color:var(--yellow); font-weight:700; margin-left:4px; }
-.cond-pills   { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
-.cpill        { display:inline-flex; align-items:center; gap:3px; padding:3px 8px; border-radius:20px; font-size:11px; font-weight:700; }
-.cpill.pass   { color:var(--green); background:#002010; border:1px solid #00e87a30; }
-.cpill.fail   { color:var(--red);   background:#1a0208; border:1px solid #ff445530; }
-.meters       { display:flex; flex-direction:column; gap:6px; }
-.meter-row    { display:flex; align-items:center; gap:8px; }
-.meter-label  { font-size:10px; color:var(--muted); width:78px; flex-shrink:0; }
-.meter-track  { flex:1; background:var(--border); border-radius:4px; height:5px; overflow:hidden; }
-.meter-fill   { height:100%; border-radius:4px; transition:width .6s ease; }
-.meter-val    { font-size:10px; font-weight:700; width:42px; text-align:right; flex-shrink:0; }
-.card-toggle  { text-align:right; font-size:11px; color:var(--dim); margin-top:8px; }
+#prog-stats {
+  background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:12px 14px; margin:12px 0; text-align:left;
+}
+.pstat-row { display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:11px; }
+.pstat-row + .pstat-row { border-top:1px solid var(--border); padding-top:7px; margin-top:3px; }
+.pstat-label { color:var(--muted); }
+.pstat-val   { font-weight:700; }
 
-.card-body    { border-top:1px solid var(--borderhi); padding:14px 14px; animation:fadeUp .2s ease; }
-.verdict      { border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:12px; color:var(--text); line-height:1.6; }
-.trade-block  { background:#07090e; border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:10px; }
-.block-title  { font-size:10px; letter-spacing:.12em; font-weight:800; text-transform:uppercase; margin-bottom:10px; }
-.trade-grid   { display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:12px; color:var(--text); line-height:1.9; }
-.tg-label     { font-size:10px; color:var(--muted); margin-bottom:2px; }
-.tg-value     { font-weight:700; }
-.timing-row   { display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:4px 0; }
-.timing-row + .timing-row { border-top:1px solid var(--border); margin-top:4px; padding-top:8px; }
-.timing-label { color:var(--muted); }
-.verify-note  { margin-top:10px; font-size:10px; color:var(--dim); line-height:1.6; text-align:center; }
+#prog-ticker {
+  font-size:12px; color:var(--blue); text-align:center;
+  margin-bottom:6px; min-height:16px;
+  animation:pulse 1.5s ease-in-out infinite;
+}
+#prog-found { font-size:13px; color:var(--green); font-weight:700; text-align:center; margin-bottom:14px; min-height:16px; }
 
-#status-bar { text-align:center; font-size:10px; color:var(--dim); margin-top:12px; line-height:1.7; }
-#error-box  { background:#1a0208; border:1px solid #ff445540; border-radius:8px; padding:16px; text-align:center; color:var(--red); font-size:13px; line-height:1.7; }
-#empty      { text-align:center; padding:48px 20px; color:var(--dim); }
+.load-steps { margin-top:14px; border-top:1px solid var(--border); padding-top:12px; }
+.load-step  { font-size:10px; color:var(--dim); margin-bottom:4px; text-align:left; }
 
-.pb-intro   { background:#001a0d; border:1px solid #00e87a22; border-left:3px solid var(--green); border-radius:8px; padding:12px 14px; margin-bottom:12px; font-size:12px; color:var(--text); line-height:1.75; }
-.pb-section { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:13px 14px; margin-bottom:10px; }
-.pb-title   { font-size:11px; letter-spacing:.1em; font-weight:800; text-transform:uppercase; margin-bottom:10px; }
-.pb-row     { display:flex; gap:8px; font-size:12px; color:var(--text); line-height:1.65; margin-bottom:8px; align-items:flex-start; }
-.pb-bullet  { font-weight:800; flex-shrink:0; }
-.pb-tag     { border-radius:3px; padding:1px 6px; font-size:11px; font-weight:700; margin-right:6px; }
-.disclaimer { font-size:10px; color:var(--dim); text-align:center; line-height:1.7; margin-top:12px; }
+/* live result flash */
+.live-badge {
+  display:inline-block; background:var(--green); color:#000;
+  font-size:9px; font-weight:800; border-radius:4px; padding:1px 5px;
+  margin-left:6px; animation:blink .6s ease 3;
+}
 
-/* Layer 2 — CSP cards */
+/* ── Cards ─────────────────────────────────────────────────── */
 .csp-card         { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:10px; overflow:hidden; animation:fadeUp .4s ease both; cursor:pointer; transition:border-color .2s; }
 .csp-card:active  { opacity:.9; transform:scale(.99); }
 .csp-card.strong  { border-color:#003320; }
@@ -143,18 +106,49 @@
 .csp-card.open.strong { background:#001a0d; }
 .csp-card.open.decent { background:#001020; }
 .csp-card.open.skip   { background:#1a0408; }
-.csp-header       { padding:14px 14px 12px; }
-.csp-top          { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px; }
-.csp-metrics      { display:flex; gap:8px; flex-wrap:wrap; }
-.csp-metric       { background:#ffffff08; border:1px solid var(--border); border-radius:6px; padding:5px 9px; text-align:center; }
+.csp-header { padding:14px 14px 12px; }
+.csp-top    { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px; }
+.csp-metrics { display:flex; gap:7px; flex-wrap:wrap; }
+.csp-metric  { background:#ffffff08; border:1px solid var(--border); border-radius:6px; padding:5px 9px; text-align:center; }
 .csp-metric-label { font-size:9px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; margin-bottom:2px; }
 .csp-metric-val   { font-size:12px; font-weight:700; }
-.csp-body         { border-top:1px solid var(--borderhi); padding:14px; animation:fadeUp .2s ease; }
-.csp-grid         { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; font-size:12px; line-height:1.85; }
-.csp-block        { background:#07090e; border:1px solid var(--border); border-radius:8px; padding:11px 13px; }
-.iv-bar-wrap      { display:flex; align-items:center; gap:8px; margin-top:4px; }
-.iv-bar-track     { flex:1; background:var(--border); border-radius:3px; height:5px; overflow:hidden; }
-.iv-bar-fill      { height:100%; border-radius:3px; }
+.csp-body   { border-top:1px solid var(--borderhi); padding:14px; animation:fadeUp .2s ease; }
+.csp-grid   { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; font-size:12px; line-height:1.85; }
+.csp-block  { background:#07090e; border:1px solid var(--border); border-radius:8px; padding:11px 13px; }
+.iv-bar-wrap  { display:flex; align-items:center; gap:8px; margin-top:8px; }
+.iv-bar-track { flex:1; background:var(--border); border-radius:3px; height:5px; overflow:hidden; }
+.iv-bar-fill  { height:100%; border-radius:3px; }
+
+.ticker-badge { border-radius:8px; padding:6px 10px; text-align:center; min-width:52px; flex-shrink:0; }
+.ticker-sym   { font-size:15px; font-weight:800; color:var(--bright); letter-spacing:.02em; }
+.ticker-price { font-size:11px; font-weight:700; }
+.stock-info   { flex:1; margin:0 10px; }
+.stock-name   { font-size:13px; color:var(--text); font-weight:600; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.card-right   { display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0; }
+.rec-badge    { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:800; letter-spacing:.06em; }
+.card-toggle  { text-align:right; font-size:11px; color:var(--dim); margin-top:8px; }
+.block-title  { font-size:10px; letter-spacing:.12em; font-weight:800; text-transform:uppercase; margin-bottom:10px; }
+
+/* ── Status bar ────────────────────────────────────────────── */
+#csp-status-bar { text-align:center; font-size:10px; color:var(--dim); margin-top:12px; line-height:1.7; }
+#csp-error      { display:none; }
+#csp-empty      { display:none; text-align:center; padding:48px 20px; color:var(--dim); }
+
+/* ── Playbook ───────────────────────────────────────────────── */
+.pb-intro   { background:#001a0d; border:1px solid #00e87a22; border-left:3px solid var(--green); border-radius:8px; padding:12px 14px; margin-bottom:12px; font-size:12px; color:var(--text); line-height:1.75; }
+.pb-section { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:13px 14px; margin-bottom:10px; }
+.pb-title   { font-size:11px; letter-spacing:.1em; font-weight:800; text-transform:uppercase; margin-bottom:10px; }
+.pb-row     { display:flex; gap:8px; font-size:12px; color:var(--text); line-height:1.65; margin-bottom:8px; align-items:flex-start; }
+.pb-bullet  { font-weight:800; flex-shrink:0; }
+.pb-tag     { border-radius:3px; padding:1px 6px; font-size:11px; font-weight:700; margin-right:6px; }
+.disclaimer { font-size:10px; color:var(--dim); text-align:center; line-height:1.7; margin-top:12px; }
+
+.trade-block { background:#07090e; border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:10px; }
+.verdict     { border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:12px; color:var(--text); line-height:1.6; }
+.timing-row  { display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:4px 0; }
+.timing-row + .timing-row { border-top:1px solid var(--border); margin-top:4px; padding-top:8px; }
+.timing-label { color:var(--muted); }
+.verify-note  { margin-top:10px; font-size:10px; color:var(--dim); line-height:1.6; text-align:center; }
 ```
 
   </style>
@@ -168,7 +162,7 @@
         <div class="logo-badge">VV</div>
         <div>
           <div class="logo-title">VV Options Scanner</div>
-          <div class="logo-sub">CALENDAR SPREADS &middot; CASH-SECURED PUTS</div>
+          <div class="logo-sub">CASH-SECURED PUTS &middot; 1,500+ TICKERS</div>
         </div>
       </div>
       <button id="refresh-btn" onclick="doRefresh()">
@@ -179,31 +173,16 @@
 
 ```
 <div class="tabs">
-  <button class="tab"        id="tab-scan"     onclick="setTab('scan')">Layer 1 &middot; IV Crush</button>
-  <button class="tab active" id="tab-l2"       onclick="setTab('l2')">Layer 2 &middot; Puts</button>
-  <button class="tab"        id="tab-playbook" onclick="setTab('playbook')">Playbook</button>
+  <button class="tab active" id="tab-scan"     onclick="setTab('scan')">&#9670; CSP Scanner</button>
+  <button class="tab"        id="tab-playbook" onclick="setTab('playbook')">&#9654; Playbook</button>
 </div>
 
 <div id="scan-controls">
-  <div class="search-wrap">
-    <span class="search-icon">&#9906;</span>
-    <input id="search" type="text" placeholder="Filter ticker or name..." oninput="applyFilter()"/>
-    <button class="search-clear" id="search-clear" style="display:none" onclick="clearSearch()">&#215;</button>
-  </div>
   <div class="filters">
-    <button class="fpill active-all" id="fpill-all" onclick="setFilter('all')">All</button>
-    <button class="fpill"            id="fpill-rec" onclick="setFilter('rec')">&#10003; Rec</button>
-    <button class="fpill"            id="fpill-con" onclick="setFilter('con')">&#9680; Consider</button>
-    <button class="fpill"            id="fpill-av"  onclick="setFilter('av')">&#9675; Avoid</button>
-  </div>
-</div>
-
-<div id="csp-controls" style="display:none">
-  <div class="filters">
-    <button class="fpill active-all" id="cpill-all"    onclick="setCspFilter('all')">All</button>
-    <button class="fpill"            id="cpill-strong" onclick="setCspFilter('strong')" style="color:var(--green)">&#9733; Strong</button>
-    <button class="fpill"            id="cpill-decent" onclick="setCspFilter('decent')" style="color:var(--blue)">&#9670; Decent</button>
-    <button class="fpill"            id="cpill-skip"   onclick="setCspFilter('skip')"   style="color:var(--red)">&#9675; Skip</button>
+    <button class="fpill active-all"    id="cpill-all"    onclick="setCspFilter('all')">All</button>
+    <button class="fpill"               id="cpill-strong" onclick="setCspFilter('strong')" style="color:var(--green)">&#9733; Strong</button>
+    <button class="fpill"               id="cpill-decent" onclick="setCspFilter('decent')" style="color:var(--blue)">&#9670; Decent</button>
+    <button class="fpill"               id="cpill-skip"   onclick="setCspFilter('skip')"   style="color:var(--red)">&#9675; Skip</button>
   </div>
 </div>
 ```
@@ -211,182 +190,311 @@
   </div>
 
   <div id="content">
-    <div id="loading">
-      <div class="spinner"></div>
-      <div class="load-title" id="load-title">Scanning earnings calendar...</div>
-      <div id="progress-wrap" style="display:none">
-        <div id="progress-track"><div id="progress-bar"></div></div>
-        <div id="progress-label"></div>
-      </div>
-      <div class="load-step">&rsaquo; Fetching Nasdaq earnings calendar (next 35 days)</div>
-      <div class="load-step">&rsaquo; Filtering to liquid tickers with options</div>
-      <div class="load-step">&rsaquo; Pulling live options chains (~150 tickers)</div>
-      <div class="load-step">&rsaquo; Computing term structure slopes</div>
-      <div class="load-step">&rsaquo; Calculating IV30/RV30 ratios</div>
-      <div class="load-step">&rsaquo; Scoring &amp; ranking setups (4-8 min)</div>
-    </div>
-    <div id="results"   style="display:none"></div>
-    <div id="error-box" style="display:none"></div>
-    <div id="empty"     style="display:none">
-      <div style="font-size:28px;margin-bottom:12px;opacity:.3">&#11042;</div>
-      <div style="font-size:13px;color:var(--muted)">No results match your filter</div>
-    </div>
-    <div id="status-bar" style="display:none"></div>
 
 ```
-<div id="csp-results"    style="display:none"></div>
-<div id="csp-loading"    style="display:none;text-align:center;padding:48px 20px">
+<!-- ── CSP Loading Screen ─────────────────────────────────── -->
+<div id="csp-loading">
   <div class="spinner"></div>
-  <div class="load-title" id="csp-load-title">Pre-filtering 500+ tickers...</div>
-  <div id="csp-progress-wrap" style="display:none">
-    <div id="progress-track"><div id="csp-progress-bar" style="height:100%;background:linear-gradient(90deg,var(--yellow),var(--blue));border-radius:6px;width:0%;transition:width .5s ease"></div></div>
-    <div id="csp-progress-label" style="font-size:11px;color:var(--muted);text-align:center;margin-top:4px"></div>
-  </div>
-  <div class="load-step">&rsaquo; Stage 1: Price + volume pre-filter (500+ tickers, ~60s)</div>
-  <div class="load-step">&rsaquo; Stage 2: Options chains on tickers that pass (varies)</div>
-  <div class="load-step">&rsaquo; Calculating IV rank, 30-delta strike, premium estimates</div>
-  <div class="load-step">&rsaquo; Checking earnings conflicts, spread quality</div>
-  <div class="load-step">&rsaquo; Rating STRONG / DECENT / SKIP — results stream in live</div>
-</div>
-<div id="csp-error"      style="display:none"></div>
-<div id="csp-status-bar" style="display:none;text-align:center;font-size:10px;color:var(--dim);margin-top:12px;line-height:1.7"></div>
+  <div class="load-title" id="load-title">Starting scan...</div>
 
+  <div id="prog-wrap" style="display:none">
+    <div id="prog-track"><div id="prog-bar"></div></div>
+    <div id="prog-pct"></div>
+  </div>
+
+  <div id="prog-found" style="display:none"></div>
+  <div id="prog-ticker" style="display:none"></div>
+
+  <div id="prog-stats" style="display:none">
+    <div class="pstat-row">
+      <span class="pstat-label">Universe</span>
+      <span class="pstat-val" id="pstat-universe">—</span>
+    </div>
+    <div class="pstat-row">
+      <span class="pstat-label">Passed pre-filter</span>
+      <span class="pstat-val" id="pstat-passed">—</span>
+    </div>
+    <div class="pstat-row">
+      <span class="pstat-label">Elapsed</span>
+      <span class="pstat-val" id="pstat-elapsed">—</span>
+    </div>
+    <div class="pstat-row">
+      <span class="pstat-label">Est. remaining</span>
+      <span class="pstat-val" id="pstat-eta">—</span>
+    </div>
+  </div>
+
+  <div class="load-steps">
+    <div class="load-step">&#8250; Stage 1: Price + volume pre-filter (1,500+ tickers, ~60s)</div>
+    <div class="load-step">&#8250; Stage 2: Pull live options chains on tickers that pass</div>
+    <div class="load-step">&#8250; Calculate IV rank from 1yr realized vol range</div>
+    <div class="load-step">&#8250; Select ~30-delta put strike, compute premium + ROC</div>
+    <div class="load-step">&#8250; Check earnings dates (3 sources: Yahoo Finance, yfinance, Nasdaq)</div>
+    <div class="load-step">&#8250; Rate STRONG / DECENT / SKIP &mdash; results stream in live</div>
+  </div>
+</div>
+
+<!-- ── Results ────────────────────────────────────────────── -->
+<div id="csp-results" style="display:none"></div>
+
+<!-- ── Error ──────────────────────────────────────────────── -->
+<div id="csp-error"></div>
+
+<!-- ── Empty ──────────────────────────────────────────────── -->
+<div id="csp-empty">
+  <div style="font-size:28px;margin-bottom:12px;opacity:.3">&#11042;</div>
+  <div style="font-size:13px;color:var(--muted)">No results match your filter</div>
+</div>
+
+<!-- ── Status bar ─────────────────────────────────────────── -->
+<div id="csp-status-bar" style="display:none"></div>
+
+<!-- ── Playbook ───────────────────────────────────────────── -->
 <div id="playbook" style="display:none">
   <div class="pb-intro">
-    <strong style="color:var(--green)">Strategy: Earnings IV Crush &mdash; Long Calendar Spread</strong><br>
-    Sell front-month ATM into earnings, buy back-month ATM +30 days.
-    Backtested: <strong style="color:var(--bright)">72,500 events, 4,500 stocks, 2007&ndash;present</strong>.
-    Filtered win rate: <strong style="color:var(--green)">~66%</strong>, avg return: <strong style="color:var(--green)">7.3%/trade</strong>.
+    <strong style="color:var(--green)">Strategy: Cash-Secured Put (CSP) &mdash; The Wheel</strong><br>
+    Sell an out-of-the-money put at ~30-delta with 30&ndash;50 DTE when IV rank is elevated (&gt;50%).
+    Collect premium now, buy stock at a discount if assigned. Then sell covered calls &mdash; repeat.
   </div>
+
   <div class="pb-section">
     <div class="pb-title" style="color:var(--green)">Three Entry Conditions</div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--green)">&#8250;</span><span><span class="pb-tag" style="background:#00e87a14;color:var(--green);border:1px solid #00e87a28">C1 &mdash; CRITICAL</span>Term structure slope &le; -0.00406/day. Near-term IV significantly above 45-day IV. NOT met = AVOID always.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--blue)">&#8250;</span><span><span class="pb-tag" style="background:#38b6ff14;color:var(--blue);border:1px solid #38b6ff28">C2 &mdash; Volume</span>30-day avg volume &ge; 1,500,000 shares. More participants = more inflated premiums.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--yellow)">&#8250;</span><span><span class="pb-tag" style="background:#f5c84214;color:var(--yellow);border:1px solid #f5c84228">C3 &mdash; IV/RV</span>IV30/RV30 ratio &ge; 1.25. Options structurally overpriced vs realized volatility.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--green)">&#8250;</span><span><span class="pb-tag" style="background:#00e87a14;color:var(--green);border:1px solid #00e87a28">STRONG &mdash; IV Rank &ge; 60%</span>Options are rich relative to 1-year realized vol. Best premium collection environment.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--blue)">&#8250;</span><span><span class="pb-tag" style="background:#38b6ff14;color:var(--blue);border:1px solid #38b6ff28">DECENT &mdash; IV Rank 45&ndash;59%</span>Acceptable premium. Verify technical support at the strike before entering.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">SKIP &mdash; IV Rank &lt; 45%</span>Premium too thin relative to risk. Earnings within expiry = automatic SKIP.</span></div>
   </div>
+
   <div class="pb-section">
     <div class="pb-title" style="color:var(--blue)">Trade Execution</div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#ffffff10;color:var(--text);border:1px solid #ffffff20">Structure</span>Long Calendar Spread. Sell front-month ATM call (earnings expiry). Buy back-month ATM call same strike +30 days. Debit trade.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#ffffff10;color:var(--text);border:1px solid #ffffff20">Enter</span>15 min before market close, day BEFORE earnings (~3:45 PM ET).</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#ffffff10;color:var(--text);border:1px solid #ffffff20">Exit</span>15 min after market open, day OF earnings (~9:45 AM ET). ~16-18 hr hold.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#ffffff10;color:var(--text);border:1px solid #ffffff20">Size</span>Max 6% of portfolio per trade (10% Kelly). Max loss = full debit paid.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#ffffff10;color:var(--text);border:1px solid #ffffff20">Structure</span>Sell to Open 1+ put contract(s). Cash-secured: keep full collateral (strike &times; 100) in account.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#ffffff10;color:var(--text);border:1px solid #ffffff20">Strike</span>~30-delta put. Out-of-the-money, typically 5&ndash;15% below current price. Should be near technical support.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#ffffff10;color:var(--text);border:1px solid #ffffff20">Expiry</span>30&ndash;50 DTE. Sweet spot for theta decay without excessive overnight-event risk.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#ffffff10;color:var(--text);border:1px solid #ffffff20">Take Profit</span>Close at 50% of premium collected. Do not hold to expiry.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#ffffff10;color:var(--text);border:1px solid #ffffff20">Stop Loss</span>Close at 2&times; premium paid (200% loss on position).</span></div>
   </div>
+
   <div class="pb-section">
-    <div class="pb-title" style="color:var(--yellow)">Signal Definitions</div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--green)">&#8250;</span><span><span class="pb-tag" style="background:#00e87a14;color:var(--green);border:1px solid #00e87a28">RECOMMENDED</span>All 3 conditions confirmed. Full position. Execute.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--yellow)">&#8250;</span><span><span class="pb-tag" style="background:#f5c84214;color:var(--yellow);border:1px solid #f5c84228">CONSIDER</span>C1 + one other met. Half position size or skip if uncertain.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">AVOID</span>C1 not met. No IV crush edge. Do not trade.</span></div>
+    <div class="pb-title" style="color:var(--yellow)">The Wheel (If Assigned)</div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--yellow)">&#8250;</span><span><strong>Layer 3:</strong> You now own 100 shares at the put strike. Your effective cost basis = strike &minus; premium collected.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--yellow)">&#8250;</span><span>Immediately sell a <strong>covered call</strong> at or slightly above your cost basis, 30&ndash;45 DTE. Collect more premium.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--yellow)">&#8250;</span><span>Repeat monthly. Each cycle lowers your breakeven by 1&ndash;3%. Stock called away = full profit on the trade cycle.</span></div>
   </div>
+
   <div class="pb-section">
     <div class="pb-title" style="color:var(--red)">Critical Rules</div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Exit</span>Always exit at open. Do NOT hold through the day &mdash; post-earnings drift works against the calendar.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Variance</span>34% of trades lose even when all 3 conditions met. Stay consistent.</span></div>
-    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Sizing</span>Never exceed 6% per trade. Oversizing will blow up the account.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Earnings</span>NEVER sell a CSP that expires after an earnings date. Earnings = gap risk. Skip and re-enter post-earnings.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Spread</span>Bid/ask spread &gt; 15% = avoid. Wide spreads mean poor fills and illiquid options.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Support</span>Always verify the strike is near a chart support level. IV rank is not a substitute for technical analysis.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Sizing</span>Max 5&ndash;10% of portfolio per position. Collateral requirements limit natural position sizing.</span></div>
   </div>
-  <div class="disclaimer">FOR EDUCATIONAL PURPOSES ONLY &middot; NOT FINANCIAL ADVICE<br>ALWAYS VERIFY DATA BEFORE TRADING</div>
+
+  <div class="pb-section">
+    <div class="pb-title" style="color:var(--purple)">How This Scanner Works</div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span>Scans 1,500+ tickers from S&amp;P 500/400/600 + NASDAQ-100 + liquid ETFs and high-vol names.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span>Stage 1 pre-filter: removes anything below $2 or under 250k avg volume (&lt;0.1s/ticker).</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span>Stage 2 scoring: pulls live options chains, calculates IV rank from 1yr realized vol, selects ~30-delta put strike.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span>Earnings dates cross-checked across 3 sources: Yahoo Finance API, yfinance calendar, and Nasdaq earnings calendar.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span>Results stream in live during the scan — you don't have to wait for completion to start reviewing setups.</span></div>
+  </div>
+
+  <div class="disclaimer">FOR EDUCATIONAL PURPOSES ONLY &middot; NOT FINANCIAL ADVICE<br>ALWAYS VERIFY DATA AND SUPPORT LEVELS BEFORE TRADING</div>
 </div>
 ```
 
-  </div>
-</div>
+  </div><!-- /content -->
+</div><!-- /app -->
 
 <script>
-  // ── SET YOUR RENDER URL HERE ──────────────────────────────────────────────
+  // ── SET YOUR BACKEND URL HERE ─────────────────────────────────────────────
   const API_BASE = "https://vv-scanner-production.up.railway.app";
   // ─────────────────────────────────────────────────────────────────────────
 
-  let allResults = [];
-  let activeFilter = "all";
-  let activeTab = "l2";
-  let expandedCards = new Set();
-  let progressInterval = null;
-  let cspResults = [];
-  let cspFilter = "all";
-  let cspExpanded = new Set();
-  let cspProgInterval = null;
+  let cspResults   = [];
+  let cspFilter    = "all";
+  let cspExpanded  = new Set();
+  let cspProgInt   = null;
+  let activeTab    = "scan";
+  let scanDone     = false;
+  let lastFoundCnt = 0;
 
+  // ── Boot ──────────────────────────────────────────────────────────────────
   window.addEventListener("DOMContentLoaded", () => {
-    // Set initial tab state properly before loading data
-    setTab("l2");
+    setTab("scan");
+    loadCSP();
   });
 
-  async function loadScan() {
-    showLoading();
-    // Kick off scan then poll — never wait on one long request
-    try {
-      const res = await fetch(API_BASE + "/api/scan");
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const data = await res.json();
-      if (data.isRefreshing || data.progress.phase !== "done") {
-        // Scan running - show partial results and keep polling
-        if (data.results && data.results.length > 0) {
-          allResults = data.results;
-          updateFilterCounts();
-          renderResults();
-          showStatusBar(data);
-        }
-        startProgressPoll();
-        pollForResults();
+  // ── Tab switching ─────────────────────────────────────────────────────────
+  function setTab(t) {
+    activeTab = t;
+    document.getElementById("tab-scan").classList.toggle("active", t === "scan");
+    document.getElementById("tab-playbook").classList.toggle("active", t === "playbook");
+    document.getElementById("scan-controls").style.display = t === "scan" ? "" : "none";
+    document.getElementById("playbook").style.display      = t === "playbook" ? "" : "none";
+
+    if (t === "scan") {
+      if (!scanDone && !cspResults.length) {
+        showCspLoading();
       } else {
-        stopProgressPoll();
-        allResults = data.results || [];
-        updateFilterCounts();
-        renderResults();
-        showStatusBar(data);
+        hideCspLoading();
+        renderCSP();
+        document.getElementById("csp-status-bar").style.display = cspResults.length ? "" : "none";
       }
-    } catch(e) {
-      showLoading();
-      document.getElementById("load-title").textContent = "Connecting to server...";
-      await sleep(8000);
-      loadScan();
+    } else {
+      // Hide all scan UI when on playbook
+      hideCspLoading();
+      document.getElementById("csp-results").style.display    = "none";
+      document.getElementById("csp-status-bar").style.display = "none";
     }
   }
 
-  async function pollForResults() {
-    for (let i = 0; i < 120; i++) {
-      await sleep(5000);
+  // ── CSP Load + Poll ───────────────────────────────────────────────────────
+  async function loadCSP() {
+    showCspLoading();
+
+    for (let attempt = 0; attempt < 5; attempt++) {
       try {
-        const res = await fetch(API_BASE + "/api/scan");
+        const res  = await fetch(API_BASE + "/api/csp/scan", { signal: AbortSignal.timeout(20000) });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+
+        if (data.results && data.results.length > 0) {
+          cspResults = data.results;
+          if (activeTab === "scan") renderCSP();
+          updateStatusBar(data);
+        }
+
+        if (data.isRefreshing || (data.progress && data.progress.phase !== "done")) {
+          startProgPoll();
+          pollCSP();
+        } else {
+          stopProgPoll();
+          scanDone = true;
+          hideCspLoading();
+          if (activeTab === "scan") {
+            renderCSP();
+            document.getElementById("csp-status-bar").style.display = "";
+          }
+        }
+        return;
+
+      } catch (e) {
+        const titleEl = document.getElementById("load-title");
+        if (titleEl) titleEl.textContent = "Waking up server... (" + (attempt + 1) + "/5)";
+        await sleep(attempt < 2 ? 6000 : 10000);
+      }
+    }
+
+    // All retries failed
+    showCspError(
+      "Could not reach server. Railway may be starting up (usually 30-60s).",
+      true
+    );
+  }
+
+  async function pollCSP() {
+    for (let i = 0; i < 90; i++) {
+      await sleep(6000);
+      try {
+        const res  = await fetch(API_BASE + "/api/csp/scan");
         if (!res.ok) continue;
         const data = await res.json();
-        // Show partial results as they come in
+
         if (data.results && data.results.length > 0) {
-          allResults = data.results;
-          updateFilterCounts();
-          renderResults();
-          showStatusBar(data);
+          cspResults = data.results;
+          if (activeTab === "scan") renderCSP();
+          updateStatusBar(data);
         }
-        if (!data.isRefreshing && data.progress.phase === "done") {
-          stopProgressPoll();
+
+        if (!data.isRefreshing && data.progress && data.progress.phase === "done") {
+          stopProgPoll();
+          scanDone = true;
+          hideCspLoading();
+          if (activeTab === "scan") {
+            renderCSP();
+            document.getElementById("csp-status-bar").style.display = "";
+          }
           return;
         }
-      } catch(e) {
-        await sleep(5000);
+      } catch (e) {
+        await sleep(4000);
       }
     }
-    stopProgressPoll();
+    stopProgPoll();
   }
 
-  function startProgressPoll() {
-    stopProgressPoll();
-    progressInterval = setInterval(async () => {
-      try {
-        const p = await fetch(API_BASE + "/api/progress").then(r => r.json());
-        if (p.total > 0) {
-          document.getElementById("progress-wrap").style.display = "";
-          document.getElementById("progress-bar").style.width = p.pct + "%";
-          document.getElementById("progress-label").textContent = p.done + " / " + p.total + " tickers scanned (" + p.pct + "%)";
-          var phaseLabel = {"calendar":"Fetching earnings calendar...","scoring":"Scoring options chains...","done":"Finalizing results..."};
-          document.getElementById("load-title").textContent = phaseLabel[p.phase] || "Scanning earnings calendar...";
-        }
-      } catch(e) {}
-    }, 1500);
+  function startProgPoll() {
+    stopProgPoll();
+    cspProgInt = setInterval(updateProgress, 2000);
+    updateProgress();
   }
 
-  function stopProgressPoll() {
-    if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
+  function stopProgPoll() {
+    if (cspProgInt) { clearInterval(cspProgInt); cspProgInt = null; }
   }
 
+  async function updateProgress() {
+    try {
+      const p = await fetch(API_BASE + "/api/csp/progress").then(r => r.json());
+
+      const titleEl   = document.getElementById("load-title");
+      const wrapEl    = document.getElementById("prog-wrap");
+      const barEl     = document.getElementById("prog-bar");
+      const pctEl     = document.getElementById("prog-pct");
+      const foundEl   = document.getElementById("prog-found");
+      const tickerEl  = document.getElementById("prog-ticker");
+      const statsEl   = document.getElementById("prog-stats");
+      const univEl    = document.getElementById("pstat-universe");
+      const passEl    = document.getElementById("pstat-passed");
+      const elapsEl   = document.getElementById("pstat-elapsed");
+      const etaEl     = document.getElementById("pstat-eta");
+
+      if (titleEl) titleEl.textContent = p.phaseLabel || "Scanning...";
+
+      if (p.total > 0) {
+        wrapEl.style.display = "";
+        barEl.style.width    = p.pct + "%";
+        pctEl.textContent    = p.done.toLocaleString() + " / " + p.total.toLocaleString() + " tickers  (" + p.pct + "%)";
+      }
+
+      // Found count + flash if new results came in
+      if (p.found > 0) {
+        foundEl.style.display = "";
+        const isNew = p.found > lastFoundCnt;
+        lastFoundCnt = p.found;
+        foundEl.innerHTML = "&#10003; " + p.found + " setup" + (p.found !== 1 ? "s" : "") + " found" +
+          (isNew ? " <span class='live-badge'>NEW</span>" : "");
+      }
+
+      // Current ticker
+      if (p.currentTicker && p.phase === "scoring") {
+        tickerEl.style.display = "";
+        tickerEl.textContent   = "⟳  Scoring: " + p.currentTicker;
+      } else if (p.currentTicker && p.phase === "pre-filter") {
+        tickerEl.style.display = "";
+        tickerEl.textContent   = "⟳  Checking: " + p.currentTicker;
+      } else {
+        tickerEl.style.display = "none";
+      }
+
+      // Stats panel
+      if (p.phase === "scoring" || p.phase === "pre-filter") {
+        statsEl.style.display = "";
+        if (univEl)  univEl.textContent  = (p.universe || "—").toLocaleString() + " tickers";
+        if (passEl)  passEl.textContent  = p.passed > 0 ? p.passed.toLocaleString() + " tickers" : "—";
+        if (elapsEl) elapsEl.textContent = p.elapsed > 0 ? fmtTime(p.elapsed) : "—";
+        if (etaEl)   etaEl.textContent   = p.eta   > 0  ? "~" + fmtTime(p.eta)  : (p.phase === "pre-filter" ? "calculating..." : "—");
+      }
+
+    } catch (e) { /* ignore progress fetch errors silently */ }
+  }
+
+  function fmtTime(secs) {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return m > 0 ? m + "m " + s + "s" : s + "s";
+  }
+
+  // ── Refresh ───────────────────────────────────────────────────────────────
   async function doRefresh() {
     const icon  = document.getElementById("refresh-icon");
     const label = document.getElementById("refresh-label");
@@ -395,42 +503,19 @@
     label.textContent = "Scanning...";
     btn.disabled = true;
 
-    if (activeTab === "l2") {
-      // Refresh Layer 2
-      try {
-        await fetch(API_BASE + "/api/csp/refresh", {method:"POST"});
-        cspResults = []; cspExpanded = new Set();
-        loadCSP();
-      } catch(e) {
-        document.getElementById("csp-error").style.display = "";
-        document.getElementById("csp-error").innerHTML = "<div style='background:#1a0208;border:1px solid #ff445540;border-radius:8px;padding:14px;color:var(--red);font-size:12px;text-align:center'>Refresh failed: " + e.message + "</div>";
-      } finally {
-        icon.classList.remove("spin");
-        label.textContent = "Refresh";
-        btn.disabled = false;
-      }
-      return;
-    }
-
-    // Refresh Layer 1 (default)
-    showLoading();
-    startProgressPoll();
     try {
-      await fetch(API_BASE + "/api/refresh", {method:"POST"});
-      for (let i = 0; i < 200; i++) {
-        await sleep(5000);
-        try {
-          const s = await fetch(API_BASE + "/api/status").then(r => r.json());
-          if (!s.running) break;
-        } catch(e) {
-          await sleep(10000);
-        }
-      }
-      stopProgressPoll();
-      await loadScan();
-    } catch(e) {
-      stopProgressPoll();
-      showError(e.message);
+      await fetch(API_BASE + "/api/csp/refresh", { method: "POST" });
+      cspResults   = [];
+      cspExpanded  = new Set();
+      scanDone     = false;
+      lastFoundCnt = 0;
+      document.getElementById("csp-results").style.display    = "none";
+      document.getElementById("csp-status-bar").style.display = "none";
+      showCspLoading();
+      startProgPoll();
+      pollCSP();
+    } catch (e) {
+      showCspError("Refresh failed: " + e.message, true);
     } finally {
       icon.classList.remove("spin");
       label.textContent = "Refresh";
@@ -438,167 +523,54 @@
     }
   }
 
-  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-  function setTab(t) {
-    activeTab = t;
-    document.getElementById("tab-scan").classList.toggle("active", t === "scan");
-    document.getElementById("tab-l2").classList.toggle("active", t === "l2");
-    document.getElementById("tab-playbook").classList.toggle("active", t === "playbook");
-    document.getElementById("scan-controls").style.display  = t === "scan" ? "" : "none";
-    document.getElementById("csp-controls").style.display   = t === "l2"   ? "" : "none";
-    document.getElementById("playbook").style.display       = t === "playbook" ? "" : "none";
-
-    // Hide all L1 elements when switching away
-    var l1Els = ["results","loading","error-box","empty","status-bar"];
-    l1Els.forEach(function(id) {
-      document.getElementById(id).style.display = "none";
-    });
-    // Hide all L2 elements when switching away
-    var l2Els = ["csp-results","csp-loading","csp-error","csp-status-bar"];
-    l2Els.forEach(function(id) {
-      document.getElementById(id).style.display = "none";
-    });
-
-    if (t === "scan") {
-      if (allResults.length) {
-        renderResults();
-        document.getElementById("status-bar").style.display = "";
-      } else {
-        showLoading();
-      }
-    } else if (t === "l2") {
-      if (cspResults.length) {
-        renderCSP();
-        document.getElementById("csp-status-bar").style.display = "";
-      } else {
-        loadCSP();
-      }
-    }
-  }
-
-  // ── Layer 2 functions ─────────────────────────────────────────────────────
-
-  async function loadCSP() {
-    // Hide all L1 elements first
-    ["loading","results","error-box","empty","status-bar"].forEach(function(id) {
-      document.getElementById(id).style.display = "none";
-    });
-    document.getElementById("csp-loading").style.display = "block";
-    document.getElementById("csp-results").style.display = "none";
-    document.getElementById("csp-error").style.display   = "none";
-    document.getElementById("csp-status-bar").style.display = "none";
-
-    // Try up to 4 times with delay — handles Railway cold start (~30s to wake)
-    for (var attempt = 0; attempt < 4; attempt++) {
-      try {
-        var res  = await fetch(API_BASE + "/api/csp/scan", {signal: AbortSignal.timeout(20000)});
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        var data = await res.json();
-        if (data.isRefreshing || (data.progress && data.progress.phase !== "done")) {
-          if (data.results && data.results.length > 0) {
-            cspResults = data.results;
-            renderCSP();
-          }
-          startCspProgressPoll();
-          pollCSP();
-        } else {
-          stopCspProgressPoll();
-          cspResults = data.results || [];
-          renderCSP();
-          showCspStatusBar(data);
-        }
-        return; // success — exit retry loop
-      } catch(e) {
-        if (attempt < 3) {
-          // Cold start retry — show waiting message and try again
-          var loadTitle = document.getElementById("csp-load-title");
-          if (loadTitle) loadTitle.textContent = "Waking up server... (" + (attempt+1) + "/3)";
-          await sleep(8000);
-        } else {
-          // All retries failed — show error with retry button
-          document.getElementById("csp-loading").style.display = "none";
-          document.getElementById("csp-error").style.display = "block";
-          document.getElementById("csp-error").innerHTML =
-            "<div style='background:#1a0208;border:1px solid #ff445540;border-radius:8px;padding:18px;color:var(--red);font-size:12px;text-align:center'>" +
-            "<div style='font-size:14px;font-weight:700;margin-bottom:8px'>⚠ Could not reach server</div>" +
-            "<div style='color:var(--muted);margin-bottom:14px'>Railway may be starting up. Usually takes 30-60 seconds after inactivity.</div>" +
-            "<button onclick='loadCSP()' style='background:var(--green);border:none;border-radius:7px;color:#000;font-weight:800;padding:10px 24px;font-size:13px;cursor:pointer'>↻ Try Again</button>" +
-            "</div>";
-        }
-      }
-    }
-  }
-
-  async function pollCSP() {
-    for (let i = 0; i < 60; i++) {
-      await sleep(8000);
-      try {
-        const res  = await fetch(API_BASE + "/api/csp/scan");
-        if (!res.ok) continue;
-        const data = await res.json();
-        if (data.results && data.results.length > 0) {
-          cspResults = data.results;
-          renderCSP();
-          showCspStatusBar(data);
-        }
-        if (!data.isRefreshing && data.progress && data.progress.phase === "done") {
-          stopCspProgressPoll();
-          return;
-        }
-      } catch(e) { await sleep(5000); }
-    }
-    stopCspProgressPoll();
-  }
-
-  function startCspProgressPoll() {
-    stopCspProgressPoll();
-    cspProgInterval = setInterval(async () => {
-      try {
-        const p = await fetch(API_BASE + "/api/csp/progress").then(r => r.json());
-        if (p.total > 0) {
-          document.getElementById("csp-progress-wrap").style.display = "";
-          document.getElementById("csp-progress-bar").style.width = p.pct + "%";
-          document.getElementById("csp-progress-label").textContent =
-            p.done + " / " + p.total + " tickers (" + p.pct + "%)";
-          const titleEl = document.getElementById("csp-load-title");
-          if (titleEl) titleEl.textContent = p.phaseLabel || "Scanning...";
-        }
-      } catch(e) {}
-    }, 2000);
-  }
-  function stopCspProgressPoll() {
-    if (cspProgInterval) { clearInterval(cspProgInterval); cspProgInterval = null; }
-  }
-
+  // ── Filter ────────────────────────────────────────────────────────────────
   function setCspFilter(f) {
     cspFilter = f;
     ["all","strong","decent","skip"].forEach(id => {
       const el = document.getElementById("cpill-" + id);
       if (!el) return;
-      el.className = "fpill" + (f === id ? " active-all" : "");
+      el.className = "fpill" + (f === id ? " active-" + id : "");
     });
     renderCSP();
   }
 
+  // ── Render cards ──────────────────────────────────────────────────────────
   function renderCSP() {
-    document.getElementById("csp-loading").style.display = "none";
     const el = document.getElementById("csp-results");
+    const emptyEl = document.getElementById("csp-empty");
+
     if (!cspResults.length) {
       el.style.display = "none";
+      emptyEl.style.display = "";
       return;
     }
+
     const filtered = cspResults.filter(r => {
       if (cspFilter === "strong") return r.quality === "STRONG";
       if (cspFilter === "decent") return r.quality === "DECENT";
       if (cspFilter === "skip")   return r.quality === "SKIP";
       return true;
     });
-    el.style.display = "";
-    el.innerHTML = filtered.map(r => cspCardHTML(r)).join("");
+
+    emptyEl.style.display = filtered.length ? "none" : "";
+    el.style.display = filtered.length ? "" : "none";
+    el.innerHTML = filtered.map((r, i) => cspCardHTML(r, i)).join("");
+
+    // Update filter pill counts
+    const s = cspResults.filter(r => r.quality==="STRONG").length;
+    const d = cspResults.filter(r => r.quality==="DECENT").length;
+    const sk = cspResults.filter(r => r.quality==="SKIP").length;
+    const allEl    = document.getElementById("cpill-all");
+    const strongEl = document.getElementById("cpill-strong");
+    const decentEl = document.getElementById("cpill-decent");
+    const skipEl   = document.getElementById("cpill-skip");
+    if (allEl)    allEl.textContent    = "All (" + cspResults.length + ")";
+    if (strongEl) strongEl.textContent = "★ " + s + " Strong";
+    if (decentEl) decentEl.textContent = "◆ " + d + " Decent";
+    if (skipEl)   skipEl.textContent   = "○ " + sk + " Skip";
   }
 
-  function cspCardHTML(r) {
+  function cspCardHTML(r, i) {
     const qualMap = {
       STRONG: { color:"var(--green)",  bg:"#001a0d", label:"&#9733; STRONG"  },
       DECENT: { color:"var(--blue)",   bg:"#001020", label:"&#9670; DECENT"  },
@@ -607,22 +579,25 @@
     const q   = qualMap[r.quality] || qualMap.SKIP;
     const exp = cspExpanded.has(r.ticker);
     const ivColor = r.ivRank >= 60 ? "var(--green)" : r.ivRank >= 45 ? "var(--yellow)" : "var(--red)";
-    const earnWarn = r.earningsWithin
-      ? "<span style='color:var(--red);font-size:10px;'>&#9888; Earnings within expiry</span>"
-      : r.earningsDate
-        ? "<span style='color:var(--yellow);font-size:10px;'>Earnings: " + r.earningsDate + " (" + r.earningsDays + "d)</span>"
-        : "";
+    const delay   = (Math.min(i, 20) * 0.04) + "s";
 
-    var html = "<div class='csp-card " + r.quality.toLowerCase() + (exp?" open":"") + "' onclick='toggleCsp(\"" + r.ticker + "\")'>" +
+    const earnWarn = r.earningsWithin
+      ? "<span style='color:var(--red);font-size:10px;font-weight:700'>&#9888; Earnings within expiry — avoid</span>"
+      : r.earningsDate && r.earningsDays != null
+        ? "<span style='color:var(--yellow);font-size:10px'>Earnings: " + r.earningsDate + " (" + r.earningsDays + "d)</span>"
+        : "<span style='color:var(--dim);font-size:10px'>No earnings confirmed in window</span>";
+
+    let html = "<div class='csp-card " + r.quality.toLowerCase() + (exp ? " open" : "") +
+      "' onclick='toggleCsp(\"" + r.ticker + "\")' style='animation-delay:" + delay + "'>" +
       "<div class='csp-header'>" +
         "<div class='csp-top'>" +
           "<div class='ticker-badge' style='background:" + q.bg + ";border:1px solid " + q.color + "33'>" +
             "<div class='ticker-sym'>" + r.ticker + "</div>" +
-            "<div class='ticker-price' style='color:" + q.color + "'>$" + r.price + "</div>" +
+            "<div class='ticker-price' style='color:" + q.color + "'>$" + r.price.toLocaleString() + "</div>" +
           "</div>" +
           "<div class='stock-info'>" +
-            "<div class='stock-name'>" + (r.name||r.ticker) + "</div>" +
-            "<div style='font-size:10px;color:var(--muted);margin-top:2px'>" + earnWarn + "</div>" +
+            "<div class='stock-name'>" + (r.name || r.ticker) + "</div>" +
+            "<div style='margin-top:3px'>" + earnWarn + "</div>" +
           "</div>" +
           "<div class='card-right'>" +
             "<span class='rec-badge' style='background:" + q.color + "22;color:" + q.color + ";border:1px solid " + q.color + "44'>" + q.label + "</span>" +
@@ -637,7 +612,7 @@
           "<div class='csp-metric'><div class='csp-metric-label'>Breakeven</div><div class='csp-metric-val' style='color:var(--orange)'>$" + r.breakeven + "</div></div>" +
           "<div class='csp-metric'><div class='csp-metric-label'>ROC</div><div class='csp-metric-val' style='color:var(--green)'>" + r.rocPct + "%</div></div>" +
         "</div>" +
-        "<div class='iv-bar-wrap' style='margin-top:8px'>" +
+        "<div class='iv-bar-wrap'>" +
           "<span style='font-size:9px;color:var(--muted);width:52px;flex-shrink:0'>IV Rank</span>" +
           "<div class='iv-bar-track'><div class='iv-bar-fill' style='width:" + Math.min(100,r.ivRank) + "%;background:" + ivColor + "'></div></div>" +
           "<span style='font-size:10px;font-weight:700;color:" + ivColor + ";width:34px;text-align:right'>" + r.ivRank + "%</span>" +
@@ -646,17 +621,22 @@
       "</div>";
 
     if (exp) {
-      const collateral = r.putStrike * 100;
+      const collateral    = r.putStrike * 100;
+      const l3Strike      = Math.round(r.putStrike * 1.03 / 5) * 5;
       const profitDollars = r.profitTarget;
       const stopDollars   = r.stopLoss;
-      const l3Strike      = Math.round(r.putStrike * 1.03 / 5) * 5;
+
+      const verdictText = r.quality === "STRONG"
+        ? "IV rank " + r.ivRank + "% with IV/RV ratio " + r.ivRvRatio + "x. Premium is rich vs historical vol. High-quality candidate — confirm technical support at strike."
+        : r.quality === "DECENT"
+        ? "IV rank " + r.ivRank + "% — acceptable but not exceptional. Verify support at $" + r.putStrike + " before entering."
+        : (r.earningsWithin
+            ? "Earnings (" + r.earningsDate + ") fall within the expiry window. Wait for post-earnings reset to enter."
+            : "IV rank below threshold (" + r.ivRank + "%) or spread too wide (" + r.spreadPct + "%). Skip this cycle.");
 
       html += "<div class='csp-body'>" +
         "<div class='verdict' style='background:" + q.color + "0f;border:1px solid " + q.color + "25'>" +
-          "<strong style='color:" + q.color + "'>" + r.quality + " SETUP: </strong>" +
-          (r.quality === "STRONG" ? "IV rank " + r.ivRank + "% with IV/RV ratio " + r.ivRvRatio + "x. Premium is rich relative to historical vol. High-quality candidate."
-          : r.quality === "DECENT" ? "Reasonable IV elevation at " + r.ivRank + "%. Acceptable setup — verify support level holds before entering."
-          : "IV rank below threshold or earnings conflict. Skip this cycle.") +
+          "<strong style='color:" + q.color + "'>" + r.quality + ": </strong>" + verdictText +
         "</div>" +
         "<div class='csp-grid'>" +
           "<div class='csp-block'>" +
@@ -665,7 +645,7 @@
               "<span style='color:var(--muted)'>Action:</span> <strong style='color:var(--bright)'>Sell to Open 1 contract</strong><br>" +
               "<span style='color:var(--muted)'>Option:</span> <strong style='color:var(--yellow)'>" + r.ticker + " $" + r.putStrike + " Put</strong><br>" +
               "<span style='color:var(--muted)'>Expiry:</span> <strong style='color:var(--bright)'>" + r.expiration + " (" + r.dte + " DTE)</strong><br>" +
-              "<span style='color:var(--muted)'>Price:</span> Use <strong style='color:var(--green)'>limit at $" + r.premium + "</strong> (mid)<br>" +
+              "<span style='color:var(--muted)'>Price:</span> Limit at <strong style='color:var(--green)'>$" + r.premium + "</strong> (mid)<br>" +
               "<span style='color:var(--muted)'>Bid/Ask:</span> $" + r.bid + " / $" + r.ask + " &middot; spread " + r.spreadPct + "%<br>" +
               "<span style='color:var(--muted)'>Cash needed:</span> <strong>$" + collateral.toLocaleString() + " / contract</strong>" +
             "</div>" +
@@ -676,24 +656,59 @@
               "<span style='color:var(--muted)'>Take profit:</span> <strong style='color:var(--green)'>Close at $" + (r.premium * 0.5).toFixed(2) + " (+$" + profitDollars + "/contract)</strong><br>" +
               "<span style='color:var(--muted)'>Stop loss:</span> <strong style='color:var(--red)'>Close at $" + (r.premium * 2).toFixed(2) + " (-$" + stopDollars + "/contract)</strong><br>" +
               "<span style='color:var(--muted)'>Breakeven:</span> <strong style='color:var(--orange)'>$" + r.breakeven + "/share</strong><br>" +
-              "<span style='color:var(--muted)'>ROC (period):</span> <strong style='color:var(--green)'>" + r.rocPct + "% &middot; " + r.rocAnn + "% ann.</strong><br>" +
-              "<span style='color:var(--muted)'>IV/RV ratio:</span> " + r.ivRvRatio + "x &middot; ATM IV " + r.atm_iv + "% &middot; RV30 " + r.rv30 + "%" +
+              "<span style='color:var(--muted)'>ROC:</span> <strong style='color:var(--green)'>" + r.rocPct + "% &middot; " + r.rocAnn + "% ann.</strong><br>" +
+              "<span style='color:var(--muted)'>IV/RV:</span> " + r.ivRvRatio + "x &middot; ATM IV " + r.atm_iv + "% &middot; RV30 " + r.rv30 + "%" +
             "</div>" +
           "</div>" +
         "</div>" +
+
         "<div class='trade-block'>" +
-          "<div class='block-title' style='color:var(--red)'>&#9888; IF ASSIGNED (Layer 3)</div>" +
+          "<div class='block-title' style='color:var(--purple)'>&#9670; IV ANALYSIS</div>" +
           "<div style='font-size:12px;color:var(--text);line-height:1.9'>" +
-            "You own <strong>100 " + r.ticker + " shares</strong> at <strong>$" + r.putStrike + "</strong> &mdash; effective cost basis <strong style='color:var(--orange)'>$" + r.breakeven + "</strong><br>" +
-            "Immediately sell a <strong style='color:var(--purple)'>$" + l3Strike + " covered call, 30-45 DTE</strong> to begin Layer 3.<br>" +
-            "Each covered call cycle lowers your breakeven by 1&ndash;2%. Repeat monthly until called away.<br>" +
-            "<span style='color:var(--muted)'>Max loss:</span> $" + r.breakeven + " &times; 100 = <strong style='color:var(--red)'>$" + (r.breakeven * 100).toLocaleString() + "</strong> (stock to zero)" +
+            "<div style='display:flex;justify-content:space-between;margin-bottom:8px'>" +
+              "<span style='color:var(--muted)'>ATM IV (puts)</span>" +
+              "<strong style='color:" + ivColor + "'>" + r.atm_iv + "%</strong>" +
+            "</div>" +
+            "<div style='display:flex;justify-content:space-between;margin-bottom:8px'>" +
+              "<span style='color:var(--muted)'>30-day Realized Vol</span>" +
+              "<strong>" + r.rv30 + "%</strong>" +
+            "</div>" +
+            "<div style='display:flex;justify-content:space-between;margin-bottom:8px'>" +
+              "<span style='color:var(--muted)'>IV/RV Ratio</span>" +
+              "<strong style='color:" + (r.ivRvRatio >= 1.2 ? "var(--green)" : "var(--yellow)") + "'>" + r.ivRvRatio + "x</strong>" +
+            "</div>" +
+            "<div>" +
+              "<div style='display:flex;justify-content:space-between;margin-bottom:4px'>" +
+                "<span style='color:var(--muted);font-size:10px'>IV Rank (1yr range)</span>" +
+                "<span style='color:" + ivColor + ";font-weight:700;font-size:10px'>" + r.ivRank + "%</span>" +
+              "</div>" +
+              "<div style='background:var(--border);border-radius:3px;height:6px;overflow:hidden'>" +
+                "<div style='height:100%;width:" + Math.min(100,r.ivRank) + "%;background:" + ivColor + ";border-radius:3px'></div>" +
+              "</div>" +
+            "</div>" +
           "</div>" +
         "</div>" +
-        (r.earningsWithin ? "<div class='verify-note' style='color:var(--red)'>&#9888; Earnings within expiry window &mdash; skip this setup this cycle. Wait for post-earnings reset.</div>" : "") +
-        "<div class='verify-note'>Live data via Yahoo Finance &middot; IV rank approximated from 1yr RV range &middot; Always verify support &amp; spread in your broker</div>" +
+
+        "<div class='trade-block'>" +
+          "<div class='block-title' style='color:var(--red)'>&#9888; IF ASSIGNED (Layer 3 — The Wheel)</div>" +
+          "<div style='font-size:12px;color:var(--text);line-height:1.9'>" +
+            "You own <strong>100 " + r.ticker + " shares</strong> at <strong>$" + r.putStrike + "</strong>.<br>" +
+            "Effective cost basis: <strong style='color:var(--orange)'>$" + r.breakeven + "</strong> (strike minus premium).<br>" +
+            "Sell a <strong style='color:var(--purple)'>$" + l3Strike + " covered call, 30&ndash;45 DTE</strong> immediately.<br>" +
+            "Repeat each month until called away or basis recovered.<br>" +
+            "<span style='color:var(--muted)'>Max loss: $" + r.breakeven + " &times; 100 = </span>" +
+            "<strong style='color:var(--red)'>$" + (r.breakeven * 100).toLocaleString() + "</strong>" +
+            "<span style='color:var(--dim);font-size:10px'> (stock to zero)</span>" +
+          "</div>" +
+        "</div>" +
+
+        (r.earningsWithin
+          ? "<div class='verify-note' style='color:var(--red)'>&#9888; Earnings within expiry — skip this cycle. Return after earnings are reported.</div>"
+          : "") +
+        "<div class='verify-note'>Live data via Yahoo Finance &middot; Earnings cross-checked: Yahoo Finance API + yfinance + Nasdaq calendar &middot; Always verify at your broker</div>" +
       "</div>";
     }
+
     html += "</div>";
     return html;
   }
@@ -704,237 +719,51 @@
     renderCSP();
   }
 
-  function showCspStatusBar(data) {
+  // ── UI helpers ────────────────────────────────────────────────────────────
+  function showCspLoading() {
+    document.getElementById("csp-loading").style.display    = "";
+    document.getElementById("csp-results").style.display    = "none";
+    document.getElementById("csp-error").style.display      = "none";
+    document.getElementById("csp-empty").style.display      = "none";
+    document.getElementById("csp-status-bar").style.display = "none";
+    document.getElementById("playbook").style.display       = "none";
+  }
+
+  function hideCspLoading() {
+    document.getElementById("csp-loading").style.display = "none";
+  }
+
+  function showCspError(msg, showRetry) {
+    hideCspLoading();
+    const el = document.getElementById("csp-error");
+    el.style.display = "";
+    el.innerHTML =
+      "<div style='background:#1a0208;border:1px solid #ff445540;border-radius:10px;padding:20px;text-align:center;margin-top:20px'>" +
+        "<div style='font-size:22px;margin-bottom:10px'>&#9888;</div>" +
+        "<div style='color:var(--red);font-size:13px;font-weight:700;margin-bottom:8px'>Could not reach server</div>" +
+        "<div style='color:var(--muted);font-size:12px;margin-bottom:16px;line-height:1.6'>" + msg + "</div>" +
+        (showRetry
+          ? "<button onclick='loadCSP()' style='background:var(--green);border:none;border-radius:8px;color:#000;font-weight:800;padding:10px 28px;font-size:13px;cursor:pointer'>&#8635; Try Again</button>"
+          : "") +
+      "</div>";
+  }
+
+  function updateStatusBar(data) {
     const el = document.getElementById("csp-status-bar");
-    el.style.display = "";
-    const s = data.results ? data.results.filter(r => r.quality==="STRONG").length : 0;
-    const d = data.results ? data.results.filter(r => r.quality==="DECENT").length : 0;
-    el.innerHTML = "<strong style='color:var(--bright)'>" + s + " Strong</strong> &middot; " +
-      "<strong style='color:var(--blue)'>" + d + " Decent</strong> &middot; Universe: <strong>" + data.universe + "</strong> tickers<br>" +
-      "Last scan: " + (data.scannedAt||"&mdash;") + " &middot; " +
-      "Criteria: IV rank &gt; 50 &middot; ~30&delta; put &middot; 30&ndash;50 DTE &middot; No earnings in window";
+    const s  = (data.results || []).filter(r => r.quality === "STRONG").length;
+    const d  = (data.results || []).filter(r => r.quality === "DECENT").length;
+    const refreshing = data.isRefreshing
+      ? " &middot; <span style='color:var(--yellow);animation:pulse 1.5s infinite'>&#9679; Scanning...</span>"
+      : "";
+    el.innerHTML =
+      "<strong style='color:var(--bright)'>" + s + " Strong</strong> &middot; " +
+      "<strong style='color:var(--blue)'>" + d + " Decent</strong> &middot; " +
+      "Universe: <strong>" + (data.universe || "?").toLocaleString() + "</strong>" + refreshing + "<br>" +
+      "Last scan: " + (data.scannedAt || "&mdash;") + "<br>" +
+      "Criteria: IV rank &gt; 45% &middot; ~30&delta; put &middot; 30&ndash;50 DTE &middot; no earnings in window";
   }
 
-  function setFilter(f) {
-    activeFilter = f;
-    ["all","rec","con","av"].forEach(id => {
-      document.getElementById("fpill-" + id).className = "fpill" + (f === id ? " active-" + id : "");
-    });
-    applyFilter();
-  }
-
-  function applyFilter() {
-    const q = document.getElementById("search").value.trim().toUpperCase();
-    document.getElementById("search-clear").style.display = q ? "" : "none";
-    const visible = allResults.filter(r => {
-      const sigOk = activeFilter === "all" ||
-        (activeFilter === "rec" && r.rec === "RECOMMENDED") ||
-        (activeFilter === "con" && r.rec === "CONSIDER") ||
-        (activeFilter === "av"  && r.rec === "AVOID");
-      const srchOk = !q || r.ticker.includes(q) || (r.name || "").toUpperCase().includes(q);
-      return sigOk && srchOk;
-    });
-    renderCards(visible);
-  }
-
-  function clearSearch() {
-    document.getElementById("search").value = "";
-    applyFilter();
-  }
-
-  function updateFilterCounts() {
-    const rec = allResults.filter(r => r.rec === "RECOMMENDED").length;
-    const con = allResults.filter(r => r.rec === "CONSIDER").length;
-    const av  = allResults.filter(r => r.rec === "AVOID").length;
-    document.getElementById("fpill-all").textContent = "All (" + allResults.length + ")";
-    document.getElementById("fpill-rec").textContent = "✓ " + rec + " Rec";
-    document.getElementById("fpill-con").textContent = "◐ " + con + " Consider";
-    document.getElementById("fpill-av").textContent  = "○ " + av  + " Avoid";
-  }
-
-  function renderResults() {
-    hideLoading();
-    if (!allResults.length) { showEmpty(); return; }
-    applyFilter();
-  }
-
-  function renderCards(items) {
-    const container = document.getElementById("results");
-    document.getElementById("empty").style.display = items.length ? "none" : "";
-    if (!items.length) { container.style.display = "none"; return; }
-    container.style.display = "";
-    container.innerHTML = items.map((r, i) => cardHTML(r, i)).join("");
-  }
-
-  const REC_CFG = {
-    RECOMMENDED: { color:"var(--green)",  icon:"&#9679;", cls:"rec" },
-    CONSIDER:    { color:"var(--yellow)", icon:"&#9680;", cls:"con" },
-    AVOID:       { color:"var(--red)",    icon:"&#9675;", cls:"av"  },
-  };
-
-  function cardHTML(r, i) {
-    const cfg    = REC_CFG[r.rec] || REC_CFG.AVOID;
-    const isOpen = expandedCards.has(r.ticker);
-    const delay  = (i * 0.05) + "s";
-    const soon   = r.daysToEarnings <= 7 ? '<span class="earn-soon">(' + r.daysToEarnings + 'd)</span>' : "";
-    const meters = [
-      { label:"Term Slope", val:Math.min(100, Math.abs(r.tsSlope||0)*24000), color:r.c1?"var(--green)":"var(--red)", note:(r.tsSlope||0).toFixed(4) },
-      { label:"IV/RV Ratio", val:Math.min(100,((r.ivRv||0)/2)*100),          color:r.c3?"var(--green)":"var(--red)", note:(r.ivRv||0).toFixed(2)+"x" },
-      { label:"Volume",      val:Math.min(100,((r.avgVol||0)/3000000)*100),  color:r.c2?"var(--green)":"var(--red)", note:((r.avgVol||0)/1e6).toFixed(1)+"M" },
-    ];
-    return '<div class="trade-card ' + cfg.cls + (isOpen?" open":"") + '" id="card-' + r.ticker + '" onclick="toggleCard(\'' + r.ticker + '\')" style="animation-delay:' + delay + '">' +
-      '<div class="card-header">' +
-        '<div class="card-top">' +
-          '<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">' +
-            '<div class="ticker-badge" style="background:' + cfg.color + '18;border:1px solid ' + cfg.color + '30">' +
-              '<div class="ticker-sym">' + r.ticker + '</div>' +
-              '<div class="ticker-price" style="color:' + cfg.color + '">$' + (r.price||0).toLocaleString() + '</div>' +
-            '</div>' +
-            '<div class="stock-info">' +
-              '<div class="stock-name">' + (r.name||r.ticker) + '</div>' +
-              '<div class="stock-sector">' + (r.sector||"") + '</div>' +
-            '</div>' +
-          '</div>' +
-          '<div class="card-right">' +
-            '<span class="rec-badge" style="color:' + cfg.color + ';background:' + cfg.color + '18;border:1px solid ' + cfg.color + '50">' + cfg.icon + ' ' + (r.rec==="RECOMMENDED"?"REC":r.rec) + '</span>' +
-            '<div class="earn-date">' + r.earningsDate + soon + '</div>' +
-          '</div>' +
-        '</div>' +
-        '<div class="cond-pills">' +
-          '<span class="cpill ' + (r.c1?"pass":"fail") + '">' + (r.c1?"&#10003;":"&#10007;") + ' Slope</span>' +
-          '<span class="cpill ' + (r.c2?"pass":"fail") + '">' + (r.c2?"&#10003;":"&#10007;") + ' Volume</span>' +
-          '<span class="cpill ' + (r.c3?"pass":"fail") + '">' + (r.c3?"&#10003;":"&#10007;") + ' IV/RV</span>' +
-        '</div>' +
-        '<div class="meters">' +
-          meters.map(m =>
-            '<div class="meter-row">' +
-              '<span class="meter-label">' + m.label + '</span>' +
-              '<div class="meter-track"><div class="meter-fill" style="width:' + Math.round(m.val) + '%;background:' + m.color + '"></div></div>' +
-              '<span class="meter-val" style="color:' + m.color + '">' + m.note + '</span>' +
-            '</div>'
-          ).join("") +
-        '</div>' +
-        '<div class="card-toggle">' + (isOpen ? "&#9650; Hide trade" : "&#9660; Show trade") + '</div>' +
-      '</div>' +
-      (isOpen ? expandedHTML(r, cfg) : "") +
-    '</div>';
-  }
-
-  function pnlBlockHTML(r) {
-    var debit    = r.debitEst || 0;
-    var costPer  = (debit * 100).toFixed(2);
-    var prof50   = (debit * 100 * 0.50).toFixed(2);
-    var profAvg  = (debit * 100 * 0.073).toFixed(2);
-    var profMax  = (debit * 100 * 0.80).toFixed(2);
-    var stopLoss = (debit * 100).toFixed(2);
-
-    var acctRows = [5000, 10000, 25000].map(function(a) {
-      var budget    = a * 0.06;
-      var contracts = Math.max(1, Math.floor(budget / (debit * 100)));
-      var totalCost = (contracts * debit * 100).toFixed(0);
-      var proj50    = (contracts * debit * 100 * 0.50).toFixed(0);
-      return "<div class=\"timing-row\">" +
-        "<span class=\"timing-label\">$" + a.toLocaleString() + " acct</span>" +
-        "<span>" + contracts + " contract" + (contracts !== 1 ? "s" : "") +
-        " &middot; cost <strong style=\"color:var(--yellow)\">$" + totalCost + "</strong>" +
-        " &middot; 50% target <strong style=\"color:var(--green)\">+$" + proj50 + "</strong></span>" +
-        "</div>";
-    }).join("");
-
-    return "<div class=\"trade-block\">" +
-      "<div class=\"block-title\" style=\"color:var(--purple)\">&#36; P&amp;L Per Contract</div>" +
-      "<div class=\"timing-row\"><span class=\"timing-label\">Cost / contract</span>" +
-        "<strong style=\"color:var(--yellow)\">$" + costPer + "</strong>" +
-        "<span style=\"color:var(--dim);font-size:10px;margin-left:6px\">(debit &times; 100 shares)</span></div>" +
-      "<div class=\"timing-row\"><span class=\"timing-label\">50% target</span>" +
-        "<strong style=\"color:var(--green)\">+$" + prof50 + " &nbsp;(+50%)</strong></div>" +
-      "<div class=\"timing-row\"><span class=\"timing-label\">Backtest avg</span>" +
-        "<strong style=\"color:var(--green)\">+$" + profAvg + " &nbsp;(+7.3%)</strong></div>" +
-      "<div class=\"timing-row\"><span class=\"timing-label\">Max profit est.</span>" +
-        "<strong style=\"color:var(--green)\">+$" + profMax + " &nbsp;(+80%)</strong></div>" +
-      "<div class=\"timing-row\"><span class=\"timing-label\">Stop loss</span>" +
-        "<strong style=\"color:var(--red)\">-$" + stopLoss + " &nbsp;(-100%)</strong></div>" +
-      "<div style=\"border-top:1px solid var(--border);margin:8px 0;padding-top:8px\">" +
-        "<div style=\"font-size:9px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:7px\">Sizing at 6% risk</div>" +
-        acctRows +
-      "</div>" +
-    "</div>";
-  }
-
-  function expandedHTML(r, cfg) {
-    const verdict = r.rec === "RECOMMENDED"
-      ? "All 3 conditions confirmed with live data. High-probability IV crush setup."
-      : r.rec === "CONSIDER"
-      ? "C1 confirmed + one other condition. Use half position size or skip if uncertain."
-      : "Term structure not in backwardation. No IV crush edge present. Skip.";
-    return '<div class="card-body">' +
-      '<div class="verdict" style="background:' + cfg.color + '0f;border:1px solid ' + cfg.color + '25"><strong style="color:' + cfg.color + '">' + r.rec + ': </strong>' + verdict + '</div>' +
-      '<div class="trade-block">' +
-        '<div class="block-title" style="color:var(--green)">&#9670; Exact Trade Entry</div>' +
-        '<div class="trade-grid">' +
-          '<div><div class="tg-label">STRUCTURE</div><div class="tg-value" style="color:var(--bright)">Long Calendar</div></div>' +
-          '<div><div class="tg-label">ATM STRIKE</div><div class="tg-value" style="color:var(--bright)">$' + r.strike + '</div></div>' +
-          '<div><div class="tg-label" style="color:var(--red)">SELL (front)</div><div>' + r.ticker + ' Call $' + r.strike + '<br><strong style="color:var(--bright)">' + r.frontExp + '</strong></div></div>' +
-          '<div><div class="tg-label" style="color:var(--green)">BUY (back)</div><div>' + r.ticker + ' Call $' + r.strike + '<br><strong style="color:var(--bright)">' + r.backExp + '</strong></div></div>' +
-          '<div><div class="tg-label" style="color:var(--yellow)">EST. DEBIT</div><div class="tg-value" style="color:var(--yellow)">~$' + r.debitEst + '/contract</div></div>' +
-          '<div><div class="tg-label" style="color:var(--purple)">IMPL. MOVE</div><div class="tg-value" style="color:var(--purple)">&#177;' + (r.expectedMove||"?") + '%</div></div>' +
-        '</div>' +
-      '</div>' +
-      '<div class="trade-block">' +
-        '<div class="block-title" style="color:var(--blue)">&#8987; Timing</div>' +
-        '<div class="timing-row"><span class="timing-label">Enter</span><strong style="color:var(--green)">' + r.entryDate + ' &middot; 3:45 PM ET</strong></div>' +
-        '<div class="timing-row"><span class="timing-label">Exit</span><strong style="color:var(--red)">' + r.exitDate + ' &middot; 9:45 AM ET</strong></div>' +
-        '<div class="timing-row"><span class="timing-label">Hold</span><span>~16&ndash;18 hours (overnight)</span></div>' +
-      '</div>' +
-      '<div class="trade-block">' +
-        '<div class="block-title" style="color:var(--red)">&#9888; Risk &amp; Sizing</div>' +
-        '<div class="timing-row"><span class="timing-label">Max loss</span><strong style="color:var(--red)">Full debit (defined risk)</strong></div>' +
-        '<div class="timing-row"><span class="timing-label">Position size</span><strong>Max 6% of portfolio</strong></div>' +
-        '<div class="timing-row"><span class="timing-label">Win rate</span><strong style="color:var(--green)">~66% (when all 3 met)</strong></div>' +
-        '<div class="timing-row"><span class="timing-label">Front IV</span><span>' + r.frontIV + '% &middot; Back IV ' + r.backIV + '%</span></div>' +
-      '</div>' +
-      pnlBlockHTML(r) +
-      '<div class="verify-note">Live data via Yahoo Finance &middot; Thresholds: slope &le; -0.00406 &middot; IV/RV &ge; 1.25 &middot; vol &ge; 1.5M</div>' +
-    '</div>';
-  }
-
-  function toggleCard(ticker) {
-    if (expandedCards.has(ticker)) expandedCards.delete(ticker);
-    else expandedCards.add(ticker);
-    applyFilter();
-  }
-
-  function showLoading() {
-    document.getElementById("loading").style.display = "";
-    document.getElementById("results").style.display = "none";
-    document.getElementById("error-box").style.display = "none";
-    document.getElementById("status-bar").style.display = "none";
-    document.getElementById("empty").style.display = "none";
-    document.getElementById("playbook").style.display = "none";
-  }
-  function hideLoading() { document.getElementById("loading").style.display = "none"; }
-
-  function showError(msg) {
-    hideLoading();
-    const el = document.getElementById("error-box");
-    el.style.display = "";
-    el.innerHTML = "<strong>Connection Error</strong><br><br>" + msg +
-      "<br><br><small style='color:var(--muted)'>Make sure your Render backend is running and API_BASE in index.html matches your Render URL exactly.</small>";
-  }
-
-  function showEmpty() {
-    document.getElementById("empty").style.display = "";
-    document.getElementById("results").style.display = "none";
-  }
-
-  function showStatusBar(data) {
-    const el = document.getElementById("status-bar");
-    el.style.display = "";
-    const refreshing = data.isRefreshing ? " &middot; <span style='color:var(--yellow)'>Refreshing... " + (data.progress&&data.progress.done||0) + "/" + (data.progress&&data.progress.total||0) + "</span>" : "";
-    el.innerHTML = "<strong style='color:var(--bright)'>" + data.count + "</strong> earnings setups &middot; Universe: <strong style='color:var(--bright)'>" + data.universe + "</strong> tickers<br>" +
-      "Last updated: " + (data.scannedAt||"&mdash;") + " (" + data.ageMinutes + "min ago)" + refreshing + "<br>" +
-      "Thresholds: slope &le; -0.00406 &middot; IV/RV &ge; 1.25 &middot; vol &ge; 1.5M";
-  }
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 </script>
 
 </body>
