@@ -23,16 +23,10 @@ pass
 
 # ── Constants ──────────────────────────────────────────────────────────────
 
-CACHE_TTL        = 6 * 3600
-DAYS_AHEAD       = 45          # fetch Nasdaq calendar 45 days out
-CSP_MAX_WORKERS  = 25          # parallel workers
-
-YF_HEADERS = {
-“User-Agent”: “Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 “
-“(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36”,
-“Accept”: “application/json, text/plain, */*”,
-“Accept-Language”: “en-US,en;q=0.9”,
-}
+CACHE_TTL             = 6 * 3600
+DAYS_AHEAD            = 45
+PREFILTER_WORKERS     = 12   # Stage 1: fast checks, can handle more parallelism
+SCORING_WORKERS       = 6    # Stage 2: heavy options pulls — keep low to avoid rate limits
 
 NASDAQ_HEADERS = {
 “User-Agent”: “Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36”,
@@ -41,7 +35,7 @@ NASDAQ_HEADERS = {
 “Referer”: “https://www.nasdaq.com/market-activity/earnings”,
 }
 
-# ── CSP Cache (single cache — no more L1) ─────────────────────────────────
+# ── Cache ──────────────────────────────────────────────────────────────────
 
 _csp_cache = {
 “results”:  [],
@@ -57,16 +51,15 @@ _csp_cache = {
 # ── Universe ───────────────────────────────────────────────────────────────
 
 CSP_EXTRAS = [
-# Specific adds
 “CDE”,
-# Mega-cap / large-cap tech
+# Tech
 “AAPL”,“MSFT”,“NVDA”,“GOOGL”,“AMZN”,“META”,“TSLA”,“AVGO”,“ORCL”,“AMD”,
 “ADBE”,“CRM”,“INTU”,“NOW”,“PANW”,“CRWD”,“NET”,“DDOG”,“SNOW”,“PLTR”,“MDB”,
 “INTC”,“QCOM”,“TXN”,“AMAT”,“LRCX”,“KLAC”,“MU”,“SMCI”,“ARM”,“ON”,“MRVL”,
 “CSCO”,“IBM”,“DELL”,“HPQ”,“HPE”,“ACN”,“IT”,“CTSH”,“EPAM”,“VRSK”,
 # Financials
 “JPM”,“BAC”,“WFC”,“GS”,“MS”,“C”,“V”,“MA”,“AXP”,“COF”,“DFS”,“ALLY”,“SYF”,
-“BLK”,“BX”,“KKR”,“APO”,“ARES”,“SCHW”,“IBKR”,“HOOD”,“COIN”,“MSTR”,
+“BLK”,“BX”,“KKR”,“APO”,“ARES”,“SCHW”,“IBKR”,“HOOD”,“COIN”,“MSTR”,“PYPL”,
 # Healthcare
 “UNH”,“LLY”,“JNJ”,“ABBV”,“MRK”,“PFE”,“AMGN”,“GILD”,“VRTX”,“REGN”,“ISRG”,
 “TMO”,“DHR”,“A”,“WAT”,“IDXX”,“VEEV”,“MRNA”,“BIIB”,“INCY”,“SYK”,“MDT”,“BSX”,
@@ -82,51 +75,47 @@ CSP_EXTRAS = [
 “HD”,“WMT”,“COST”,“TGT”,“MCD”,“SBUX”,“CMG”,“YUM”,“NKE”,“LULU”,“DECK”,“ONON”,
 “BKNG”,“EXPE”,“ABNB”,“UBER”,“LYFT”,“DASH”,“ETSY”,“EBAY”,“CHWY”,
 “DIS”,“NFLX”,“CMCSA”,“WBD”,“PARA”,“RBLX”,“EA”,“TTWO”,“LYV”,“DKNG”,“MGM”,“WYNN”,
-“GM”,“F”,“RIVN”,“NIO”,“LCID”,“XPEV”,“LI”,
+“GM”,“F”,“RIVN”,“NIO”,“LCID”,“XPEV”,“LI”,“DAL”,“AAL”,“UAL”,“CCL”,“RCL”,
 “ROST”,“TJX”,“BURL”,“DG”,“DLTR”,“LOW”,“ANF”,“AEO”,“GPS”,“URBN”,“KSS”,“JWN”,“M”,
 # Staples
 “PG”,“KO”,“PEP”,“PM”,“MO”,“MDLZ”,“KHC”,“GIS”,“CL”,“CHD”,“KMB”,“CLX”,
 “EL”,“ULTA”,“BBWI”,“TSN”,“HRL”,“MKC”,“SJM”,“CPB”,“SYY”,
-# Utilities / Clean Energy
+# Utilities
 “NEE”,“DUK”,“SO”,“D”,“AEP”,“EXC”,“XEL”,“WEC”,“PCG”,“EIX”,“PPL”,“AES”,
 “ENPH”,“FSLR”,“RUN”,“SEDG”,
 # Materials
-“LIN”,“APD”,“CF”,“NTR”,“FCX”,“NEM”,“GOLD”,“AEM”,“KGC”,“WPM”,“PAAS”,“CDE”,
+“LIN”,“APD”,“CF”,“NTR”,“FCX”,“NEM”,“GOLD”,“AEM”,“KGC”,“WPM”,“PAAS”,
 “NUE”,“STLD”,“CLF”,“DD”,“DOW”,“LYB”,“ALB”,“MP”,“ECL”,
 # REITs
 “AMT”,“CCI”,“EQIX”,“SBAC”,“DLR”,“IRM”,“SPG”,“O”,“VICI”,“PLD”,“PSA”,“EXR”,“EQR”,“AVB”,
 “WELL”,“VTR”,“OHI”,“ARE”,“BXP”,
 # Telecom / Media
 “VZ”,“T”,“TMUS”,“SNAP”,“PINS”,“SPOT”,“RDDT”,
-# High-beta / meme
-“HOOD”,“SOFI”,“MARA”,“RIOT”,“GME”,“AMC”,“SPCE”,“RKLB”,“ASTS”,“PLTR”,
-# Mining / precious metals
+# High-beta
+“HOOD”,“SOFI”,“MARA”,“RIOT”,“GME”,“AMC”,“SPCE”,“RKLB”,“ASTS”,
+# Mining / metals
 “NEM”,“GOLD”,“AEM”,“KGC”,“WPM”,“PAAS”,“EGO”,“IAG”,“AU”,“HL”,“SILV”,“FSM”,
 “NGD”,“GFI”,“HMY”,“SBSW”,
-# Liquid ETFs
+# ETFs
 “SPY”,“QQQ”,“IWM”,“DIA”,“MDY”,“VTI”,“VOO”,“IVV”,“RSP”,
 “GLD”,“SLV”,“GDX”,“GDXJ”,“IAU”,
 “TLT”,“IEF”,“LQD”,“HYG”,“JNK”,“AGG”,“BND”,
 “XLE”,“XLF”,“XLK”,“XLV”,“XLI”,“XLU”,“XLRE”,“XLB”,“XLY”,“XLP”,“XLC”,
 “SMH”,“SOXX”,“IBB”,“ARKK”,“ARKG”,“EEM”,“EFA”,“EWZ”,“EWJ”,“FXI”,“KWEB”,“MCHI”,
 “USO”,“UNG”,“CPER”,
-“VXX”,“UVXY”,“TQQQ”,“SQQQ”,“UPRO”,“SSO”,“SDS”,“SH”,“QLD”,
+“VXX”,“UVXY”,“TQQQ”,“SQQQ”,“UPRO”,“SSO”,
 ]
 
 def _fetch_wiki_tickers(url: str, name: str) -> list:
-“”“Fetch ticker symbols from a Wikipedia table page.”””
 try:
-headers = {“User-Agent”: “Mozilla/5.0 (compatible; bot/1.0)”}
-resp = requests.get(url, headers=headers, timeout=20)
+resp = requests.get(url, headers={“User-Agent”: “Mozilla/5.0”}, timeout=20)
 if resp.status_code != 200:
-log.warning(“Wikipedia %s HTTP %d”, name, resp.status_code)
 return []
-dfs = pd.read_html(resp.text)
-for df in dfs:
+for df in pd.read_html(resp.text):
 cols = [str(c).lower() for c in df.columns]
 sym_col = next(
 (df.columns[i] for i, c in enumerate(cols)
-if c in (“symbol”,“ticker”,“symbol[3]”,“ticker symbol”,“company”)),
+if c in (“symbol”,“ticker”,“symbol[3]”,“ticker symbol”)),
 None
 )
 if sym_col is None:
@@ -144,42 +133,31 @@ if len(batch) > 10:
 log.info(“Wikipedia %s: %d tickers”, name, len(batch))
 return batch
 except Exception as e:
-log.warning(“Wikipedia %s fetch error: %s”, name, e)
+log.warning(“Wikipedia %s: %s”, name, e)
 return []
 
 def _build_csp_universe() -> list:
-“””
-Build full scan universe from:
-- Hardcoded CSP_EXTRAS (liquid names, ETFs, high-vol)
-- S&P 500 + S&P 400 + S&P 600 from Wikipedia (~1,500 tickers)
-- NASDAQ-100 from Wikipedia
-Deduplicates and returns a clean list.
-“””
-log.info(“Building CSP universe…”)
+log.info(“Building CSP universe from Wikipedia…”)
 sources = {
-“sp500”:    “https://en.wikipedia.org/wiki/List_of_S%26P_500_companies”,
-“sp400”:    “https://en.wikipedia.org/wiki/List_of_S%26P_400_companies”,
-“sp600”:    “https://en.wikipedia.org/wiki/List_of_S%26P_600_companies”,
-“nasdaq100”:“https://en.wikipedia.org/wiki/Nasdaq-100”,
+“sp500”:     “https://en.wikipedia.org/wiki/List_of_S%26P_500_companies”,
+“sp400”:     “https://en.wikipedia.org/wiki/List_of_S%26P_400_companies”,
+“sp600”:     “https://en.wikipedia.org/wiki/List_of_S%26P_600_companies”,
+“nasdaq100”: “https://en.wikipedia.org/wiki/Nasdaq-100”,
 }
-wiki_tickers = []
+wiki = []
 for name, url in sources.items():
-wiki_tickers.extend(_fetch_wiki_tickers(url, name))
+wiki.extend(_fetch_wiki_tickers(url, name))
 
 ```
-combined = CSP_EXTRAS + wiki_tickers
+combined = CSP_EXTRAS + wiki
 seen, result = set(), []
 for t in combined:
     if t not in seen:
         seen.add(t)
         result.append(t)
-
-log.info("CSP universe built: %d unique tickers (%d from Wikipedia, %d extras)",
-         len(result), len(set(wiki_tickers)), len(set(CSP_EXTRAS)))
+log.info("Universe: %d tickers total", len(result))
 return result
 ```
-
-# Build universe in background — scan won’t start until it’s ready
 
 CSP_UNIVERSE = list(CSP_EXTRAS)
 _csp_universe_lock = threading.Lock()
@@ -193,10 +171,9 @@ log.info(“CSP universe ready: %d tickers”, len(CSP_UNIVERSE))
 
 threading.Thread(target=_load_universe_bg, daemon=True).start()
 
-# ── Core computation helpers ───────────────────────────────────────────────
+# ── Yang-Zhang Realized Volatility ─────────────────────────────────────────
 
 def yang_zhang(df, window=30, tp=252):
-“”“Yang-Zhang realized volatility estimator.”””
 try:
 lho  = (df[“High”]  / df[“Open”]).apply(np.log)
 llo  = (df[“Low”]   / df[“Open”]).apply(np.log)
@@ -212,43 +189,20 @@ return float(((ov + k*cv + (1-k)*wr).apply(np.sqrt) * np.sqrt(tp)).iloc[-1])
 except Exception:
 return 0.25
 
-# ── Earnings date: multi-source, accurate lookup ───────────────────────────
+# ── Earnings date (NO extra HTTP calls) ────────────────────────────────────
 
-def _extract_earnings(stock, sym: str, today_d: date, earnings_map: dict):
+def get_earnings_date(stock, sym: str, today_d: date, earnings_map: dict):
 “””
-Fetch next earnings date from multiple sources in priority order:
-1. Yahoo Finance quoteSummary/calendarEvents  ← most accurate
-2. yfinance .calendar (dict format, newer yfinance)
-3. yfinance .earnings_dates (filtered for future)
-4. Pre-fetched Nasdaq calendar (fallback)
+Returns (display_str, days_int) or (None, None).
+Sources checked in order:
+1. yfinance .calendar — already fetched as part of the Ticker object
+2. Pre-fetched Nasdaq calendar (earnings_map, bulk fetched once per scan)
+We do NOT make additional HTTP requests here. Rate limit safety is critical.
+“””
+candidates = []
 
 ```
-Returns (display_str like 'Apr 25', days_from_today) or (None, None).
-Uses the EARLIEST confirmed date across all sources (conservative).
-"""
-candidates = []  # list of (days_int, date_str)
-
-# ── Source 1: Yahoo Finance quoteSummary ──────────────────────────────
-try:
-    url = (f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{sym}"
-           f"?modules=calendarEvents")
-    r = requests.get(url, headers=YF_HEADERS, timeout=5)
-    if r.status_code == 200:
-        res_list = (r.json().get("quoteSummary", {}).get("result") or [])
-        if res_list:
-            cal_ev = (res_list[0].get("calendarEvents") or {})
-            earn_dates = cal_ev.get("earnings", {}).get("earningsDate", [])
-            if earn_dates:
-                ts_raw = earn_dates[0].get("raw", 0)
-                if ts_raw:
-                    earn_dt = date.fromtimestamp(ts_raw)
-                    days = (earn_dt - today_d).days
-                    if -3 <= days <= 180:
-                        candidates.append((days, earn_dt.strftime("%b %d")))
-except Exception:
-    pass
-
-# ── Source 2: yfinance .calendar (dict in yfinance >= 0.2) ───────────
+# Source 1: yfinance .calendar (dict format in yfinance >= 0.2)
 try:
     cal = stock.calendar
     if isinstance(cal, dict):
@@ -258,7 +212,7 @@ try:
         for ed in earn_list:
             if ed is None:
                 continue
-            # Could be Timestamp, datetime, or string
+            # Handle Timestamp, date, or string
             if hasattr(ed, "date"):
                 ed = ed.date()
             elif isinstance(ed, str):
@@ -266,17 +220,21 @@ try:
                     ed = datetime.strptime(ed[:10], "%Y-%m-%d").date()
                 except Exception:
                     continue
+            elif isinstance(ed, (int, float)):
+                try:
+                    ed = date.fromtimestamp(ed)
+                except Exception:
+                    continue
             days = (ed - today_d).days
-            if -3 <= days <= 180:
+            if -5 <= days <= 180:
                 candidates.append((days, ed.strftime("%b %d")))
                 break
     elif isinstance(cal, pd.DataFrame) and not cal.empty:
-        # Old yfinance: DataFrame with dates as column headers
         for col in cal.columns:
             try:
-                ed = pd.Timestamp(col).date()
+                ed   = pd.Timestamp(col).date()
                 days = (ed - today_d).days
-                if -3 <= days <= 180:
+                if -5 <= days <= 180:
                     candidates.append((days, ed.strftime("%b %d")))
                     break
             except Exception:
@@ -284,28 +242,7 @@ try:
 except Exception:
     pass
 
-# ── Source 3: yfinance .earnings_dates ───────────────────────────────
-try:
-    ei = stock.earnings_dates
-    if ei is not None and not ei.empty:
-        idx = ei.index
-        # Handle tz-aware index
-        tz = getattr(idx, "tz", None)
-        today_ts = (pd.Timestamp(today_d).tz_localize(tz)
-                    if tz else pd.Timestamp(today_d))
-        future_ei = ei[idx > today_ts]
-        if not future_ei.empty:
-            # Index is sorted descending; last entry = closest upcoming date
-            nxt = future_ei.index[-1]
-            earn_dt = nxt.date() if hasattr(nxt, "date") else None
-            if earn_dt:
-                days = (earn_dt - today_d).days
-                if 0 <= days <= 180:
-                    candidates.append((days, earn_dt.strftime("%b %d")))
-except Exception:
-    pass
-
-# ── Source 4: Pre-fetched Nasdaq calendar (fallback) ─────────────────
+# Source 2: pre-fetched Nasdaq calendar
 if sym in earnings_map:
     nd_str, nd_days = earnings_map[sym]
     if nd_days is not None and -2 <= nd_days <= 180:
@@ -314,22 +251,15 @@ if sym in earnings_map:
 if not candidates:
     return None, None
 
-# Return the EARLIEST (most conservative) date found
 candidates.sort(key=lambda x: x[0])
-best_days, best_str = candidates[0]
-return best_str, best_days
+return candidates[0][1], candidates[0][0]
 ```
 
-# ── Nasdaq earnings calendar (pre-fetched once per scan) ──────────────────
+# ── Nasdaq bulk earnings calendar ──────────────────────────────────────────
 
 def fetch_nasdaq_calendar() -> dict:
-“””
-Bulk-fetch Nasdaq earnings calendar for the next DAYS_AHEAD days.
-Returns {SYM: (date_str, days_from_today)}.
-Used as a fast fallback; per-ticker Yahoo Finance calls are more accurate.
-“””
 earnings_map = {}
-today = date.today()
+today   = date.today()
 session = requests.Session()
 session.headers.update(NASDAQ_HEADERS)
 d = today
@@ -338,7 +268,7 @@ if d.weekday() < 5:
 try:
 resp = session.get(
 “https://api.nasdaq.com/api/calendar/earnings?date=” + d.strftime(”%Y-%m-%d”),
-timeout=6)
+timeout=8)
 if resp.status_code == 200:
 rows = (resp.json().get(“data”) or {}).get(“rows”) or []
 diff = (d - today).days
@@ -347,45 +277,90 @@ sym = (row.get(“symbol”) or “”).upper().strip().replace(”/”, “-”
 if sym and 1 <= len(sym) <= 6 and sym.replace(”-”,””).isalpha():
 if sym not in earnings_map:
 earnings_map[sym] = (d.strftime(”%b %d”), diff)
-time.sleep(0.08)
+time.sleep(0.1)
 except Exception as e:
 log.warning(“Nasdaq cal %s: %s”, d, e)
 d += timedelta(days=1)
-log.info(“Nasdaq calendar: %d tickers with upcoming earnings”, len(earnings_map))
+log.info(“Nasdaq calendar: %d tickers”, len(earnings_map))
 return earnings_map
 
-# ── Pre-filter (fast, no options chain) ───────────────────────────────────
+# ── Stage 1: Fast pre-filter ───────────────────────────────────────────────
 
 def fast_prefilter(sym: str):
 “””
-Quick check using only fast_info (~0.1s vs ~3s for full score).
-Returns (price, avg_vol) tuple if passes, else None.
-Thresholds: price > $2, 3-month avg volume > 250k.
+Quick price + volume check. Returns (price, vol) or None.
+Tries fast_info first, falls back to a small history pull if needed.
+Threshold: price > $2, avg daily volume > 200k.
 “””
 try:
-fi  = yf.Ticker(sym).fast_info
-px  = float(getattr(fi, “last_price”, None) or getattr(fi, “previous_close”, None) or 0)
-vol = float(getattr(fi, “three_month_average_volume”, None) or 0)
-if px < 2 or vol < 250_000:
-return None
-return (px, vol)
-except Exception:
-return None
+t  = yf.Ticker(sym)
+fi = t.fast_info
 
-# ── Full CSP scorer ────────────────────────────────────────────────────────
+```
+    # Price — try multiple attribute names across yfinance versions
+    px = None
+    for attr in ("last_price", "previous_close", "regular_market_price"):
+        val = getattr(fi, attr, None)
+        if val is not None:
+            try:
+                f = float(val)
+                if f > 0:
+                    px = f
+                    break
+            except Exception:
+                pass
+
+    if px is None or px < 2:
+        return None
+
+    # Volume — try multiple attribute names
+    vol = None
+    for attr in ("three_month_average_volume", "regular_market_volume",
+                 "average_volume", "average_daily_volume3_month",
+                 "average_daily_volume10_day"):
+        val = getattr(fi, attr, None)
+        if val is not None:
+            try:
+                f = float(val)
+                if f > 0:
+                    vol = f
+                    break
+            except Exception:
+                pass
+
+    # Fallback: grab 10-day history for volume if fast_info didn't have it
+    if vol is None or vol == 0:
+        h = t.history(period="10d")
+        if h.empty:
+            return None
+        vol = float(h["Volume"].mean())
+
+    if vol < 200_000:
+        return None
+
+    return (px, vol)
+
+except Exception as e:
+    log.debug("Prefilter %s: %s", sym, e)
+    return None
+```
+
+# ── Stage 2: Full CSP scorer ───────────────────────────────────────────────
 
 def score_csp_ticker(sym: str, earnings_map: dict):
 “””
-Full scoring for a cash-secured put setup.
-Requires: 1yr price history, options chain, earnings date.
-Returns a result dict or None if ticker doesn’t qualify.
+Full CSP scoring. Makes 3 network calls per ticker max:
+1. stock.history(period=“1y”)
+2. stock.options  (list of expiry dates)
+3. stock.option_chain(target_exp)
+.calendar is a cached property — no additional call.
 “””
 try:
 stock   = yf.Ticker(sym)
 today_d = date.today()
 
 ```
-    # ── Price history ──────────────────────────────────────────────────
+    # 1. Price history
     h1y = stock.history(period="1y")
     if h1y.empty or len(h1y) < 60:
         return None
@@ -393,69 +368,77 @@ today_d = date.today()
     if price <= 0:
         return None
 
-    # ── Volume ────────────────────────────────────────────────────────
+    # 2. Volume
     avg_vol = float(h1y["Volume"].tail(30).mean())
     if avg_vol < 300_000:
         return None
 
-    # ── Realized volatility ───────────────────────────────────────────
+    # 3. Realized vol
     rv30 = yang_zhang(h1y, window=30)
-
-    # IV rank proxy: where does ATM IV sit vs 1yr RV range
     rv_series = h1y["Close"].pct_change().rolling(30).std() * (252 ** 0.5)
     rv_series = rv_series.dropna()
+    if rv_series.empty:
+        return None
     rv_min = float(rv_series.quantile(0.10))
     rv_max = float(rv_series.quantile(0.90))
 
-    # ── Options chain ─────────────────────────────────────────────────
-    opts = stock.options
-    if not opts or len(opts) < 1:
+    # 4. Options expiries
+    try:
+        opts = stock.options
+    except Exception:
+        return None
+    if not opts:
         return None
 
-    # Find best expiry: prefer 28-55 DTE, fall back to anything ≥ 28
+    # Find best expiry: prefer 28-55 DTE, fall back to >= 21
     target_exp, target_dte = None, None
     for exp in sorted(opts):
-        dte = (datetime.strptime(exp, "%Y-%m-%d").date() - today_d).days
-        if 28 <= dte <= 55:
-            target_exp, target_dte = exp, dte
-            break
-    if not target_exp:
-        for exp in sorted(opts):
+        try:
             dte = (datetime.strptime(exp, "%Y-%m-%d").date() - today_d).days
-            if dte >= 28:
+            if 28 <= dte <= 55:
                 target_exp, target_dte = exp, dte
                 break
-    if not target_exp or target_dte is None:
+        except Exception:
+            continue
+    if not target_exp:
+        for exp in sorted(opts):
+            try:
+                dte = (datetime.strptime(exp, "%Y-%m-%d").date() - today_d).days
+                if dte >= 21:
+                    target_exp, target_dte = exp, dte
+                    break
+            except Exception:
+                continue
+    if not target_exp:
         return None
 
-    ch = stock.option_chain(target_exp)
-    puts = ch.puts
-    if puts.empty:
+    # 5. Put chain
+    try:
+        puts = stock.option_chain(target_exp).puts
+    except Exception:
+        return None
+    if puts is None or puts.empty:
         return None
 
-    # ATM IV from puts
-    pi     = (puts["strike"] - price).abs().idxmin()
-    atm_iv = float(puts.loc[pi, "impliedVolatility"])
-    if atm_iv <= 0:
+    # ATM IV
+    atm_idx = (puts["strike"] - price).abs().idxmin()
+    atm_iv  = float(puts.loc[atm_idx, "impliedVolatility"])
+    if atm_iv <= 0 or atm_iv > 5.0:
         return None
 
-    # IV rank
-    if rv_max > rv_min:
-        iv_rank = int(min(100, max(0, (atm_iv - rv_min) / (rv_max - rv_min) * 100)))
-    else:
-        iv_rank = 50
+    # IV Rank
+    iv_rank = (int(min(100, max(0, (atm_iv - rv_min) / (rv_max - rv_min) * 100)))
+               if rv_max > rv_min else 50)
+    iv_rv_ratio = round(atm_iv / rv30, 2) if rv30 > 0 else 1.0
 
-    iv_rv_ratio = atm_iv / rv30 if rv30 > 0 else 1.0
-
-    # ── ~30-delta put strike selection ────────────────────────────────
-    T   = target_dte / 365.0
+    # ~30-delta put strike
+    T = target_dte / 365.0
     target_strike_raw = price * (1 - 0.45 * atm_iv * (T ** 0.5))
-
-    otm_puts = puts[puts["strike"] <= price * 1.01].copy()
+    otm_puts = puts[puts["strike"] <= price * 1.02].copy()
     if otm_puts.empty:
         return None
     otm_puts["dist"] = (otm_puts["strike"] - target_strike_raw).abs()
-    best_row  = otm_puts.loc[otm_puts["dist"].idxmin()]
+    best_row   = otm_puts.loc[otm_puts["dist"].idxmin()]
     put_strike = float(best_row["strike"])
 
     bid  = float(best_row.get("bid",  0) or 0)
@@ -463,35 +446,32 @@ today_d = date.today()
     oi   = int(best_row.get("openInterest", 0) or 0)
     iv_p = float(best_row.get("impliedVolatility", atm_iv) or atm_iv)
 
-    # Premium: prefer live bid/ask, fall back to BS estimate
     if bid > 0 and ask > 0:
         mid = round((bid + ask) / 2, 2)
     else:
-        mid = round(price * iv_p * (T ** 0.5) * 0.40 * (put_strike / price) ** 0.5, 2)
+        mid = round(price * iv_p * (T ** 0.5) * 0.40 * ((put_strike / price) ** 0.5), 2)
 
-    if mid <= 0.05:
+    if mid < 0.05:
         return None
 
-    spread_pct = round((ask - bid) / mid * 100, 1) if mid > 0 and ask > bid else 0
-
+    spread_pct = round((ask - bid) / mid * 100, 1) if (mid > 0 and ask > bid) else 0
     breakeven  = round(put_strike - mid, 2)
     collateral = put_strike * 100
     roc_pct    = round(mid * 100 / collateral * 100, 2) if collateral > 0 else 0
     roc_ann    = round(roc_pct * (365 / target_dte), 1) if target_dte > 0 else 0
 
-    # ── Earnings date (multi-source, accurate) ────────────────────────
-    earn_str, earn_days = _extract_earnings(stock, sym, today_d, earnings_map)
-    earn_within = earn_days is not None and earn_days <= target_dte
+    # Earnings — uses only cached/pre-fetched data, no extra HTTP calls
+    earn_str, earn_days = get_earnings_date(stock, sym, today_d, earnings_map)
+    earn_within = (earn_days is not None and earn_days <= target_dte)
 
-    # ── Quality rating ────────────────────────────────────────────────
-    if iv_rank < 45 or earn_within or spread_pct > 15:
+    # Quality rating
+    if earn_within or spread_pct > 20 or iv_rank < 45:
         quality = "SKIP"
-    elif iv_rank >= 60 and iv_rv_ratio >= 1.2 and not earn_within and spread_pct <= 8:
+    elif iv_rank >= 60 and iv_rv_ratio >= 1.2 and spread_pct <= 10:
         quality = "STRONG"
     else:
         quality = "DECENT"
 
-    # Company name
     try:
         name = getattr(stock.fast_info, "company_name", None) or sym
     except Exception:
@@ -503,7 +483,7 @@ today_d = date.today()
         "price":         round(price, 2),
         "quality":       quality,
         "ivRank":        iv_rank,
-        "ivRvRatio":     round(iv_rv_ratio, 2),
+        "ivRvRatio":     iv_rv_ratio,
         "putStrike":     put_strike,
         "expiration":    target_exp,
         "dte":           target_dte,
@@ -525,20 +505,21 @@ today_d = date.today()
         "profitTarget":  round(mid * 0.50 * 100, 2),
         "stopLoss":      round(mid * 2.0  * 100, 2),
     }
+
 except Exception as e:
     log.debug("CSP %s failed: %s", sym, e)
     return None
 ```
 
-# ── Main scan orchestrator ─────────────────────────────────────────────────
+# ── Scan orchestrator ──────────────────────────────────────────────────────
+
+def _sort_results(results):
+return sorted(
+results,
+key=lambda x: ({“STRONG”: 0, “DECENT”: 1, “SKIP”: 2}.get(x[“quality”], 3), -x[“rocAnn”])
+)
 
 def run_csp_scan():
-“””
-Two-stage scan:
-Stage 1 — fast_prefilter: price + volume only, no options pull (~0.1s/ticker)
-Stage 2 — score_csp_ticker: full options chain + earnings (~3-8s/ticker)
-Results stream into _csp_cache[“results”] in real-time.
-“””
 if _csp_cache[“running”]:
 return
 _csp_cache[“running”] = True
@@ -550,27 +531,28 @@ _csp_cache["progress"] = {
     "currentTicker": "", "found": 0, "scanStart": scan_start,
     "passedPrefilter": 0,
 }
+_csp_cache["results"] = []
 
-# ── Wait up to 30s for background universe load ────────────────────────
-deadline = time.time() + 30
+# Wait for Wikipedia universe load (up to 25s)
+deadline = time.time() + 25
 while len(CSP_UNIVERSE) <= len(CSP_EXTRAS) and time.time() < deadline:
     time.sleep(1)
 
 universe = list(CSP_UNIVERSE)
-log.info("CSP scan starting — universe: %d tickers", len(universe))
+log.info("Scan start — %d tickers", len(universe))
 
-# ── Fetch Nasdaq earnings calendar (batch, one-time) ──────────────────
+# Fetch Nasdaq earnings calendar (once)
 _csp_cache["progress"]["phase"] = "earnings calendar"
 try:
     earnings_map = fetch_nasdaq_calendar()
-except Exception:
+except Exception as e:
+    log.warning("Nasdaq calendar error: %s — proceeding without it", e)
     earnings_map = {}
-log.info("Earnings calendar loaded: %d entries", len(earnings_map))
 
-# ── Stage 1: Fast pre-filter ───────────────────────────────────────────
+# Stage 1: Fast pre-filter
 _csp_cache["progress"].update({
     "done": 0, "total": len(universe), "phase": "pre-filter",
-    "currentTicker": "", "found": 0,
+    "currentTicker": "", "passedPrefilter": 0,
 })
 log.info("Stage 1: pre-filtering %d tickers...", len(universe))
 
@@ -578,30 +560,36 @@ passed = []
 lock1  = threading.Lock()
 
 def prefilter_one(sym):
-    result = fast_prefilter(sym)
+    ok = fast_prefilter(sym)
     with lock1:
         _csp_cache["progress"]["done"] += 1
         _csp_cache["progress"]["currentTicker"] = sym
-        if result:
+        if ok:
             passed.append(sym)
             _csp_cache["progress"]["passedPrefilter"] = len(passed)
 
-with concurrent.futures.ThreadPoolExecutor(max_workers=CSP_MAX_WORKERS) as pool:
-    futs = {pool.submit(prefilter_one, sym): sym for sym in universe}
+with concurrent.futures.ThreadPoolExecutor(max_workers=PREFILTER_WORKERS) as pool:
+    futs = [pool.submit(prefilter_one, sym) for sym in universe]
     for f in concurrent.futures.as_completed(futs):
         try:
             f.result()
         except Exception:
             pass
 
-log.info("Stage 1 done: %d / %d passed pre-filter", len(passed), len(universe))
+log.info("Stage 1 done: %d / %d passed", len(passed), len(universe))
 
-# ── Stage 2: Full scoring ──────────────────────────────────────────────
+if not passed:
+    log.error("Zero tickers passed pre-filter — check yfinance connectivity")
+    _csp_cache["running"]  = False
+    _csp_cache["progress"]["phase"] = "done"
+    return
+
+# Stage 2: Full scoring
 _csp_cache["progress"].update({
     "done": 0, "total": len(passed), "phase": "scoring",
     "currentTicker": "", "found": 0,
 })
-log.info("Stage 2: scoring %d tickers with options chains...", len(passed))
+log.info("Stage 2: scoring %d tickers...", len(passed))
 
 results = []
 lock2   = threading.Lock()
@@ -614,51 +602,40 @@ def score_one(sym):
         if r:
             results.append(r)
             _csp_cache["progress"]["found"] = len(results)
-            # Stream partial results sorted by quality
-            _csp_cache["results"] = sorted(
-                results,
-                key=lambda x: (
-                    {"STRONG": 0, "DECENT": 1, "SKIP": 2}.get(x["quality"], 3),
-                    -x["rocAnn"]
-                )
-            )
+            _csp_cache["results"] = _sort_results(results)
 
-with concurrent.futures.ThreadPoolExecutor(max_workers=CSP_MAX_WORKERS) as pool:
-    futs = {pool.submit(score_one, sym): sym for sym in passed}
+with concurrent.futures.ThreadPoolExecutor(max_workers=SCORING_WORKERS) as pool:
+    futs = [pool.submit(score_one, sym) for sym in passed]
     for f in concurrent.futures.as_completed(futs):
         try:
             f.result()
         except Exception:
             pass
 
-# Final sort and cache update
-final = sorted(
-    results,
-    key=lambda x: ({"STRONG": 0, "DECENT": 1, "SKIP": 2}.get(x["quality"], 3), -x["rocAnn"])
-)
-_csp_cache["results"]  = final
+_csp_cache["results"]  = _sort_results(results)
 _csp_cache["ts"]       = time.time()
 _csp_cache["running"]  = False
 _csp_cache["progress"].update({
-    "done": len(passed), "total": len(passed),
-    "phase": "done", "currentTicker": "", "found": len(results),
+    "done":  len(passed), "total": len(passed),
+    "phase": "done",      "found": len(results),
 })
-
 elapsed = int(time.time() - scan_start)
-log.info(
-    "CSP scan complete — %d results from %d/%d tickers in %ds.",
-    len(results), len(passed), len(universe), elapsed
-)
+log.info("Scan done — %d results / %d scored / %d universe / %ds",
+         len(results), len(passed), len(universe), elapsed)
 ```
 
-# ── API Endpoints ──────────────────────────────────────────────────────────
+# ── API endpoints ──────────────────────────────────────────────────────────
+
+def _maybe_start():
+if not _csp_cache[“running”] and (
+not _csp_cache[“ts”] or time.time() - _csp_cache[“ts”] > CACHE_TTL
+):
+threading.Thread(target=run_csp_scan, daemon=True).start()
 
 @app.route(”/api/csp/scan”)
+@app.route(”/api/scan”)
 def api_csp_scan():
-“”“Main CSP scan endpoint. Auto-starts scan if cache is stale.”””
-if not _csp_cache[“ts”] or time.time() - _csp_cache[“ts”] > CACHE_TTL:
-if not _csp_cache[“running”]:
-threading.Thread(target=run_csp_scan, daemon=True).start()
+_maybe_start()
 return jsonify({
 “results”:      _csp_cache[“results”],
 “count”:        len(_csp_cache[“results”]),
@@ -671,30 +648,27 @@ if _csp_cache[“ts”] else None),
 })
 
 @app.route(”/api/csp/progress”)
+@app.route(”/api/progress”)
 def api_csp_progress():
-“”“Detailed progress for the loading screen. Polled every 2s by frontend.”””
 p       = _csp_cache[“progress”]
 pct     = int(p[“done”] / p[“total”] * 100) if p[“total”] > 0 else 0
 elapsed = int(time.time() - p.get(“scanStart”, time.time())) if _csp_cache[“running”] else 0
+eta_s   = None
+if p[“phase”] == “scoring” and p[“done”] > 3 and _csp_cache[“running”] and elapsed > 0:
+rate  = p[“done”] / elapsed
+eta_s = int((p[“total”] - p[“done”]) / rate) if rate > 0 else None
 
 ```
-# Estimated time remaining (only meaningful during scoring stage)
-eta_s = None
-if p["phase"] == "scoring" and p["done"] > 5 and _csp_cache["running"] and elapsed > 0:
-    rate      = p["done"] / elapsed
-    remaining = p["total"] - p["done"]
-    eta_s     = int(remaining / rate) if rate > 0 else None
-
 phase_labels = {
     "loading universe":  "Loading ticker universe...",
-    "earnings calendar": "Fetching earnings calendar...",
+    "earnings calendar": "Fetching Nasdaq earnings calendar...",
     "pre-filter": (
-        f"Stage 1 of 2: Fast pre-filter — checking {p['total']:,} tickers "
-        f"({p.get('passedPrefilter',0)} passed so far)"
+        f"Stage 1 of 2: Checking {p['total']:,} tickers — "
+        f"{p.get('passedPrefilter', 0)} passed so far"
     ),
     "scoring": (
         f"Stage 2 of 2: Scoring options chains — "
-        f"{p['done']}/{p['total']} tickers · {p.get('found',0)} setups found"
+        f"{p['done']}/{p['total']} done · {p.get('found', 0)} setups found"
     ),
     "done": "Scan complete ✓",
     "idle": "Ready",
@@ -717,17 +691,17 @@ return jsonify({
 ```
 
 @app.route(”/api/csp/refresh”, methods=[“POST”])
+@app.route(”/api/refresh”, methods=[“POST”])
 def api_csp_refresh():
-“”“Force a fresh scan, discarding the cache.”””
 if _csp_cache[“running”]:
-return jsonify({“message”: “Scan already in progress”, “running”: True}), 202
-# Clear cache so results show as fresh
+return jsonify({“message”: “Scan already running”, “running”: True}), 202
 _csp_cache[“ts”]      = 0
 _csp_cache[“results”] = []
 threading.Thread(target=run_csp_scan, daemon=True).start()
 return jsonify({“message”: “CSP refresh started”, “universe”: len(CSP_UNIVERSE)}), 202
 
 @app.route(”/api/csp/status”)
+@app.route(”/api/status”)
 def api_csp_status():
 return jsonify({
 “status”:   “ok”,
@@ -738,152 +712,148 @@ return jsonify({
 “progress”: _csp_cache[“progress”],
 })
 
-# ── Alias routes (keep backwards compatibility) ───────────────────────────
+@app.route(”/api/debug”)
+def api_debug():
+p   = _csp_cache[“progress”]
+out = {
+“universe_size”:     len(CSP_UNIVERSE),
+“results_count”:     len(_csp_cache[“results”]),
+“running”:           _csp_cache[“running”],
+“progress”:          p,
+“cache_age_secs”:    int(time.time() - _csp_cache[“ts”]) if _csp_cache[“ts”] else None,
+“prefilter_workers”: PREFILTER_WORKERS,
+“scoring_workers”:   SCORING_WORKERS,
+}
 
-@app.route(”/api/scan”)
-def api_scan_alias():
-return api_csp_scan()
+```
+# Nasdaq connectivity test
+try:
+    resp = requests.get(
+        "https://api.nasdaq.com/api/calendar/earnings?date=" + date.today().strftime("%Y-%m-%d"),
+        headers=NASDAQ_HEADERS, timeout=6)
+    rows = (resp.json().get("data") or {}).get("rows") or []
+    out["nasdaq_test"] = {
+        "status": resp.status_code,
+        "rows_today": len(rows),
+        "sample": [r.get("symbol") for r in rows[:5]],
+    }
+except Exception as e:
+    out["nasdaq_test"] = {"error": str(e)}
 
-@app.route(”/api/progress”)
-def api_progress_alias():
-return api_csp_progress()
+# yfinance test on AAPL
+try:
+    t   = yf.Ticker("AAPL")
+    fi  = t.fast_info
+    h5  = t.history(period="5d")
+    cal = t.calendar
+    opts = t.options
+    out["yf_test"] = {
+        "last_price":         getattr(fi, "last_price", "N/A"),
+        "previous_close":     getattr(fi, "previous_close", "N/A"),
+        "options_count":      len(opts) if opts else 0,
+        "history_rows":       len(h5),
+        "calendar_type":      type(cal).__name__,
+        "calendar_preview":   str(cal)[:300] if cal is not None else None,
+    }
+except Exception as e:
+    out["yf_test"] = {"error": str(e)}
 
-@app.route(”/api/refresh”, methods=[“POST”])
-def api_refresh_alias():
-return api_csp_refresh()
+# Prefilter test on known-good tickers
+test_syms = ["AAPL", "MSFT", "SPY", "TSLA", "XYZ_FAKE"]
+pf = {}
+for sym in test_syms:
+    try:
+        pf[sym] = fast_prefilter(sym)
+    except Exception as e:
+        pf[sym] = str(e)
+out["prefilter_test"] = pf
 
-# ── Portfolio tracker price endpoint ──────────────────────────────────────
+return jsonify(out)
+```
+
+# ── Portfolio endpoints ────────────────────────────────────────────────────
 
 @app.route(”/api/prices”)
 def api_prices():
-“”“Lightweight price fetcher. ?tickers=AAPL,MSFT,SPY (max 25)”””
-tickers_str = request.args.get(“tickers”, “”)
-tickers     = [t.strip().upper() for t in tickers_str.split(”,”) if t.strip()][:25]
+tickers = [t.strip().upper()
+for t in request.args.get(“tickers”, “”).split(”,”) if t.strip()][:25]
 if not tickers:
 return jsonify({“error”: “No tickers provided”}), 400
-
-```
 prices = {}
 for sym in tickers:
-    try:
-        fi  = yf.Ticker(sym).fast_info
-        px  = getattr(fi, "last_price", None) or getattr(fi, "previous_close", None)
-        if px and float(px) > 0:
-            prices[sym] = round(float(px), 2)
-    except Exception:
-        pass
-
-return jsonify({"prices": prices, "ts": datetime.now().strftime("%I:%M %p")})
-```
+try:
+fi = yf.Ticker(sym).fast_info
+for attr in (“last_price”, “previous_close”, “regular_market_price”):
+px = getattr(fi, attr, None)
+if px and float(px) > 0:
+prices[sym] = round(float(px), 2)
+break
+except Exception:
+pass
+return jsonify({“prices”: prices, “ts”: datetime.now().strftime(”%I:%M %p”)})
 
 @app.route(”/api/option-prices”, methods=[“POST”])
 def api_option_prices():
-“””
-Fetch live mid prices for specific option contracts.
-POST JSON: [{“id”:“abc”,“ticker”:“AAPL”,“optionType”:“call”,“strike”:175,“expiration”:“2026-05-16”,“contracts”:1}, …]
-“””
 try:
 contracts = request.get_json(force=True) or []
 except Exception:
 return jsonify({“error”: “Invalid JSON”}), 400
-
-```
-contracts = contracts[:10]
-results   = {}
-today_d   = date.today()
-
-for c in contracts:
-    cid        = c.get("id", "")
-    ticker     = (c.get("ticker") or "").upper()
-    opt_type   = (c.get("optionType") or "call").lower()
-    strike     = float(c.get("strike") or 0)
-    expiration = c.get("expiration") or ""
-    if not ticker or not strike or not expiration:
-        continue
-    try:
-        stock = yf.Ticker(ticker)
-        fi    = stock.fast_info
-        underlying = float(
-            getattr(fi, "last_price", None) or getattr(fi, "previous_close", None) or 0
-        )
-        opts = stock.options
-        if not opts:
-            continue
-        exp_date = datetime.strptime(expiration, "%Y-%m-%d").date()
-        best_exp = min(opts, key=lambda e: abs(
-            (datetime.strptime(e, "%Y-%m-%d").date() - exp_date).days
-        ))
-        chain = stock.option_chain(best_exp)
-        df    = chain.calls if opt_type == "call" else chain.puts
-        if df.empty:
-            continue
-        df      = df.copy()
-        df["dist"] = (df["strike"] - strike).abs()
-        row     = df.loc[df["dist"].idxmin()]
-        bid     = float(row.get("bid",       0) or 0)
-        ask     = float(row.get("ask",       0) or 0)
-        last    = float(row.get("lastPrice", 0) or 0)
-        iv      = float(row.get("impliedVolatility", 0) or 0)
-        mid     = round((bid + ask) / 2, 2) if bid > 0 and ask > 0 else (round(last, 2) if last > 0 else None)
-        actual_exp = datetime.strptime(best_exp, "%Y-%m-%d").date()
-        dte = max(0, (actual_exp - today_d).days)
-        results[cid] = {
-            "mid":        mid,
-            "bid":        round(bid, 2),
-            "ask":        round(ask, 2),
-            "underlying": round(underlying, 2),
-            "dte":        dte,
-            "iv":         round(iv * 100, 1) if iv else None,
-            "expUsed":    best_exp,
-            "strikeUsed": float(row["strike"]),
-        }
-    except Exception as e:
-        log.debug("Option price %s: %s", ticker, e)
-
-return jsonify({"prices": results, "ts": datetime.now().strftime("%I:%M %p")})
-```
-
-@app.route(”/api/debug”)
-def api_debug():
-p = _csp_cache[“progress”]
-out = {
-“universe”:       len(CSP_UNIVERSE),
-“results”:        len(_csp_cache[“results”]),
-“running”:        _csp_cache[“running”],
-“progress”:       p,
-“cacheAge”:       int(time.time() - _csp_cache[“ts”]) if _csp_cache[“ts”] else None,
-}
-# Quick Nasdaq API test
+results = {}
+today_d = date.today()
+for c in (contracts[:10]):
+cid        = c.get(“id”, “”)
+ticker     = (c.get(“ticker”) or “”).upper()
+opt_type   = (c.get(“optionType”) or “call”).lower()
+strike     = float(c.get(“strike”) or 0)
+expiration = c.get(“expiration”) or “”
+if not ticker or not strike or not expiration:
+continue
 try:
-resp = requests.get(
-“https://api.nasdaq.com/api/calendar/earnings?date=” + date.today().strftime(”%Y-%m-%d”),
-headers=NASDAQ_HEADERS, timeout=5)
-rows = (resp.json().get(“data”) or {}).get(“rows”) or []
-out[“nasdaq_test”] = {“status”: resp.status_code, “rows_today”: len(rows)}
-except Exception as e:
-out[“nasdaq_test”] = {“error”: str(e)}
-# Quick yfinance test
-try:
-t    = yf.Ticker(“AAPL”)
-cal  = t.calendar
-opts = t.options
-out[“yf_test”] = {
-“aapl_options_count”: len(opts) if opts else 0,
-“calendar_type”: type(cal).**name**,
+stock = yf.Ticker(ticker)
+fi    = stock.fast_info
+underlying = 0.0
+for attr in (“last_price”, “previous_close”):
+val = getattr(fi, attr, None)
+if val and float(val) > 0:
+underlying = float(val)
+break
+opts = stock.options
+if not opts:
+continue
+exp_date = datetime.strptime(expiration, “%Y-%m-%d”).date()
+best_exp = min(opts, key=lambda e: abs(
+(datetime.strptime(e, “%Y-%m-%d”).date() - exp_date).days
+))
+chain = stock.option_chain(best_exp)
+df    = chain.calls if opt_type == “call” else chain.puts
+if df.empty:
+continue
+df = df.copy()
+df[“dist”] = (df[“strike”] - strike).abs()
+row  = df.loc[df[“dist”].idxmin()]
+bid  = float(row.get(“bid”, 0) or 0)
+ask  = float(row.get(“ask”, 0) or 0)
+last = float(row.get(“lastPrice”, 0) or 0)
+iv   = float(row.get(“impliedVolatility”, 0) or 0)
+mid  = (round((bid+ask)/2, 2) if bid > 0 and ask > 0
+else round(last, 2) if last > 0 else None)
+dte  = max(0, (datetime.strptime(best_exp, “%Y-%m-%d”).date() - today_d).days)
+results[cid] = {
+“mid”: mid, “bid”: round(bid,2), “ask”: round(ask,2),
+“underlying”: round(underlying,2), “dte”: dte,
+“iv”: round(iv*100,1) if iv else None,
+“expUsed”: best_exp, “strikeUsed”: float(row[“strike”]),
 }
 except Exception as e:
-out[“yf_test”] = {“error”: str(e)}
-return jsonify(out)
+log.debug(“Option price %s: %s”, ticker, e)
+return jsonify({“prices”: results, “ts”: datetime.now().strftime(”%I:%M %p”)})
 
 @app.route(”/”)
 def index():
 p = _csp_cache[“progress”]
-return (
-f”VV CSP Scanner | Universe: {len(CSP_UNIVERSE)} tickers | “
-f”Results: {len(_csp_cache[‘results’])} | “
-f”Running: {_csp_cache[‘running’]} ({p[‘done’]}/{p[‘total’]}) | “
-f”Phase: {p[‘phase’]} | /api/debug”
-)
+return (f”VV CSP Scanner | Universe: {len(CSP_UNIVERSE)} | “
+f”Results: {len(_csp_cache[‘results’])} | Running: {_csp_cache[‘running’]} | “
+f”Phase: {p[‘phase’]} ({p[‘done’]}/{p[‘total’]}) | /api/debug”)
 
 if **name** == “**main**”:
 port = int(os.environ.get(“PORT”, 5000))
