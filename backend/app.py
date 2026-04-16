@@ -25,8 +25,9 @@ pass
 
 CACHE_TTL             = 6 * 3600
 DAYS_AHEAD            = 45
-PREFILTER_WORKERS     = 12   # Stage 1: fast checks, can handle more parallelism
-SCORING_WORKERS       = 6    # Stage 2: heavy options pulls — keep low to avoid rate limits
+PREFILTER_WORKERS     = 20   # Stage 1: fast_info only
+SCORING_WORKERS       = 15   # Stage 2: increased from 6 — main speed lever
+SCORING_CAP           = 400  # Max tickers to score in Stage 2 (top by volume)
 
 NASDAQ_HEADERS = {
 “User-Agent”: “Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36”,
@@ -343,7 +344,7 @@ fi = t.fast_info
             return None
         vol = float(h["Volume"].mean())
 
-    if vol < 200_000:
+    if vol < 500_000:
         return None
 
     return (px, vol)
@@ -358,27 +359,27 @@ except Exception as e:
 def score_csp_ticker(sym: str, earnings_map: dict):
 “””
 Full CSP scoring. Makes 3 network calls per ticker max:
-1. stock.history(period=“1y”)
-2. stock.options  (list of expiry dates)
-3. stock.option_chain(target_exp)
-.calendar is a cached property — no additional call.
+1. stock.history(period=“6mo”)  — 6mo is enough for RV; 2x faster than 1y
+2. stock.options                — list of expiry dates
+3. stock.option_chain(exp)      — put chain for target expiry
+.calendar is a cached property — no extra network call.
 “””
 try:
 stock   = yf.Ticker(sym)
 today_d = date.today()
 
 ```
-    # 1. Price history
-    h1y = stock.history(period="1y")
-    if h1y.empty or len(h1y) < 60:
+    # 1. Price history — 6mo sufficient for RV and IV rank, downloads faster
+    h1y = stock.history(period="6mo")
+    if h1y.empty or len(h1y) < 40:
         return None
     price = float(h1y["Close"].iloc[-1])
     if price <= 0:
         return None
 
     # 2. Volume
-    avg_vol = float(h1y["Volume"].tail(30).mean())
-    if avg_vol < 300_000:
+    avg_vol = float(h1y["Volume"].tail(20).mean())
+    if avg_vol < 500_000:
         return None
 
     # 3. Realized vol
@@ -565,6 +566,7 @@ _csp_cache["progress"].update({
 log.info("Stage 1: pre-filtering %d tickers...", len(universe))
 
 passed = []
+passed_vols_map = {}   # {sym: volume} for sorting Stage 2
 lock1  = threading.Lock()
 
 def prefilter_one(sym):
@@ -573,7 +575,9 @@ def prefilter_one(sym):
         _csp_cache["progress"]["done"] += 1
         _csp_cache["progress"]["currentTicker"] = sym
         if ok:
+            px, vol = ok
             passed.append(sym)
+            passed_vols_map[sym] = vol
             _csp_cache["progress"]["passedPrefilter"] = len(passed)
 
 with concurrent.futures.ThreadPoolExecutor(max_workers=PREFILTER_WORKERS) as pool:
@@ -591,6 +595,12 @@ if not passed:
     _csp_cache["running"]  = False
     _csp_cache["progress"]["phase"] = "done"
     return
+
+# Sort by volume descending, cap at SCORING_CAP so Stage 2 stays fast
+passed_vols = [(sym, vol) for sym, vol in passed_vols_map.items() if sym in set(passed)]
+passed_vols.sort(key=lambda x: -x[1])
+passed = [sym for sym, _ in passed_vols[:SCORING_CAP]]
+log.info("Stage 2 candidates: %d (capped at %d, sorted by volume)", len(passed), SCORING_CAP)
 
 # Stage 2: Full scoring
 _csp_cache["progress"].update({
