@@ -25,9 +25,9 @@ pass
 
 CACHE_TTL             = 6 * 3600
 DAYS_AHEAD            = 45
-PREFILTER_WORKERS     = 20   # Stage 1: fast_info only
-SCORING_WORKERS       = 15   # Stage 2: increased from 6 — main speed lever
-SCORING_CAP           = 400  # Max tickers to score in Stage 2 (top by volume)
+PREFILTER_WORKERS     = 10   # Stage 1
+SCORING_WORKERS       = 8    # Stage 2 — keep below 10 or Railway HTTP thread gets starved
+SCORING_CAP           = 350  # Max tickers in Stage 2
 
 NASDAQ_HEADERS = {
 “User-Agent”: “Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36”,
@@ -550,13 +550,24 @@ while len(CSP_UNIVERSE) <= len(CSP_EXTRAS) and time.time() < deadline:
 universe = list(CSP_UNIVERSE)
 log.info("Scan start — %d tickers", len(universe))
 
-# Fetch Nasdaq earnings calendar (once)
-_csp_cache["progress"]["phase"] = "earnings calendar"
-try:
-    earnings_map = fetch_nasdaq_calendar()
-except Exception as e:
-    log.warning("Nasdaq calendar error: %s — proceeding without it", e)
-    earnings_map = {}
+# Fetch Nasdaq earnings calendar in a background thread so we don't
+# block scan start. Stage 1 prefilter runs concurrently with the calendar fetch.
+earnings_map = {}
+earnings_lock = threading.Lock()
+cal_done = threading.Event()
+
+def fetch_cal_bg():
+    try:
+        result = fetch_nasdaq_calendar()
+        with earnings_lock:
+            earnings_map.update(result)
+    except Exception as e:
+        log.warning("Nasdaq calendar bg error: %s", e)
+    finally:
+        cal_done.set()
+
+cal_thread = threading.Thread(target=fetch_cal_bg, daemon=True)
+cal_thread.start()
 
 # Stage 1: Fast pre-filter
 _csp_cache["progress"].update({
@@ -589,6 +600,11 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=PREFILTER_WORKERS) as poo
             pass
 
 log.info("Stage 1 done: %d / %d passed", len(passed), len(universe))
+
+# Ensure calendar fetch is complete before Stage 2 (it runs concurrently with Stage 1)
+log.info("Waiting for earnings calendar to finish...")
+cal_done.wait(timeout=30)
+log.info("Earnings calendar ready: %d entries", len(earnings_map))
 
 if not passed:
     log.error("Zero tickers passed pre-filter — check yfinance connectivity")
