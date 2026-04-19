@@ -345,40 +345,50 @@
     while (true) {
       attempt++;
       try {
-        // No AbortController timeout here — let it wait as long as needed
         var res = await fetch(API_BASE + "/api/csp/scan");
-
         if (!res.ok) throw new Error("HTTP " + res.status);
         var data = await res.json();
 
-        // ── Connected ──────────────────────────────────────────────────────
         stopConnTimer();
 
-        if (data.results && data.results.length > 0) {
+        var isDone = !data.isRefreshing &&
+          data.progress && data.progress.phase === "done";
+        var hasResults = data.results && data.results.length > 0;
+
+        // Always store results if we have them
+        if (hasResults) {
           cspResults = data.results;
-          if (activeTab === "scan") renderCSP();
           updateStatusBar(data);
         }
 
-        var stillRunning = data.isRefreshing ||
-          (data.progress && data.progress.phase !== "done" && data.progress.phase !== "idle");
-
-        if (stillRunning) {
-          document.getElementById("csp-loading").style.display = "";
-          startProgPoll();
-          pollCSP();
-        } else if (data.results && data.results.length > 0) {
-          document.getElementById("csp-loading").style.display    = "none";
-          document.getElementById("csp-status-bar").style.display = "";
+        if (isDone && hasResults) {
+          // Scan complete, results ready — show them immediately
           scanDone = true;
+          document.getElementById("csp-loading").style.display    = "none";
+          document.getElementById("csp-results").style.display    = "";
+          document.getElementById("csp-status-bar").style.display = "";
+          onScanComplete();
+          renderCSP();
+          return;
+        } else if (isDone && !hasResults) {
+          // Scan done but no results — show empty state
+          scanDone = true;
+          document.getElementById("csp-loading").style.display = "none";
+          document.getElementById("csp-empty").style.display   = "";
+          onScanComplete();
+          return;
         } else {
-          // Server up but no scan running — trigger one
+          // Scan still running — show progress and keep polling
           document.getElementById("csp-loading").style.display = "";
-          try { await fetchWithTimeout(API_BASE + "/api/csp/refresh", 10000); } catch(e) {}
+          if (hasResults) {
+            // Show partial results alongside loading screen
+            document.getElementById("csp-results").style.display = "";
+            renderCSP();
+          }
           startProgPoll();
           pollCSP();
+          return;
         }
-        return;
 
       } catch (e) {
         var elapsed = Math.floor((Date.now() - connStart) / 1000);
@@ -392,16 +402,14 @@
         } else if (elapsed < 120) {
           if (titleEl) titleEl.textContent = "Server is waking up...";
           if (subEl)   subEl.textContent   = "Railway cold start — usually under 60s";
-          if (msgEl)   msgEl.textContent   = "Scan will start automatically once connected.";
+          if (msgEl)   msgEl.innerHTML     = "Scan will start automatically once connected.";
         } else {
           if (titleEl) titleEl.textContent = "Scan in progress...";
           if (subEl)   subEl.textContent   = "Server is busy scanning. Still trying...";
-          if (msgEl)   msgEl.textContent   = "This can happen during a large scan. Please wait.";
+          if (msgEl)   msgEl.innerHTML     = "This can happen during a large scan. Please wait.";
         }
 
         if (elapsed > 300) showRetryButton();
-
-        // Short delay between retries — don't wait 10s each time
         await sleep(attempt <= 2 ? 3000 : 6000);
       }
     }
@@ -430,11 +438,10 @@
 
         if (data.results && data.results.length > 0) {
           cspResults = data.results;
-          if (activeTab === "scan") renderCSP();
           updateStatusBar(data);
-          // Hide loading screen once we have results streaming in
-          if (document.getElementById("csp-results").innerHTML) {
-            // Keep loading bar visible at top — don't hide it yet
+          if (activeTab === "scan") {
+            document.getElementById("csp-results").style.display = "";
+            renderCSP();
           }
         }
 
@@ -445,22 +452,22 @@
           stopProgPoll();
           scanDone = true;
           onScanComplete();
-          document.getElementById("csp-loading").style.display = "none";
-          document.getElementById("csp-results").style.display = "";
-          document.getElementById("csp-status-bar").style.display = "";
+          document.getElementById("csp-loading").style.display    = "none";
+          document.getElementById("csp-results").style.display    = cspResults.length ? "" : "none";
+          document.getElementById("csp-empty").style.display      = cspResults.length ? "none" : "";
+          document.getElementById("csp-status-bar").style.display = cspResults.length ? "" : "none";
           if (activeTab === "scan") renderCSP();
           return;
         }
-      } catch (e) {
-        // Transient error — keep polling
-      }
+      } catch (e) { /* keep polling */ }
     }
-    // Timeout after 120 polls (12 mins) — just hide the loading screen
+    // Timeout — show whatever we have
     stopProgPoll();
     document.getElementById("csp-loading").style.display = "none";
     if (cspResults.length) {
-      document.getElementById("csp-results").style.display = "";
+      document.getElementById("csp-results").style.display    = "";
       document.getElementById("csp-status-bar").style.display = "";
+      renderCSP();
     }
   }
 
