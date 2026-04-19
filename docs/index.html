@@ -626,6 +626,15 @@
   function renderCSP() {
     var el      = document.getElementById("csp-results");
     var emptyEl = document.getElementById("csp-empty");
+    var loadEl  = document.getElementById("csp-loading");
+
+    // If we have results, the loading screen must never be visible — period.
+    // This fires from every code path (pollCSP, updateProgress, loadCSP, setCspFilter).
+    if (cspResults.length > 0 && loadEl) {
+      loadEl.style.display = "none";
+      document.getElementById("csp-status-bar").style.display = "";
+      stopProgPoll();
+    }
 
     if (!cspResults.length) {
       el.style.display      = "none";
