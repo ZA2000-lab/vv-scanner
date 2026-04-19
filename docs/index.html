@@ -423,9 +423,10 @@
   // ── Result poller (once connected, checks every 6s) ───────────────────────
   async function pollCSP() {
     for (var i = 0; i < 120; i++) {
-      await sleep(6000);
+      await sleep(5000);
       try {
-        var res  = await fetchWithTimeout(API_BASE + "/api/csp/scan", 15000);
+        // Plain fetch — no timeout — so Safari never aborts it
+        var res  = await fetch(API_BASE + "/api/csp/scan");
         if (!res.ok) continue;
         var data = await res.json();
 
@@ -449,12 +450,14 @@
           document.getElementById("csp-results").style.display    = cspResults.length ? "" : "none";
           document.getElementById("csp-empty").style.display      = cspResults.length ? "none" : "";
           document.getElementById("csp-status-bar").style.display = cspResults.length ? "" : "none";
-          if (activeTab === "scan") renderCSP();
+          if (activeTab === "scan" && cspResults.length) renderCSP();
           return;
         }
-      } catch (e) { /* keep polling */ }
+      } catch (e) {
+        // Network error — keep polling
+      }
     }
-    // Timeout — show whatever we have
+    // Poll timeout — hide loading regardless, show what we have
     stopProgPoll();
     document.getElementById("csp-loading").style.display = "none";
     if (cspResults.length) {
@@ -477,7 +480,7 @@
 
   async function updateProgress() {
     try {
-      var res = await fetchWithTimeout(API_BASE + "/api/csp/progress", 8000);
+      var res = await fetch(API_BASE + "/api/csp/progress");
       if (!res.ok) return;
       var p = await res.json();
 
@@ -507,14 +510,14 @@
           (isNew ? " <span class='live-badge'>NEW</span>" : "");
       }
 
-      if (p.currentTicker && (p.phase === "scoring" || p.phase === "pre-filter")) {
+      if (p.currentTicker && (p.phase === "scoring options" || p.phase === "pre-filter" || p.phase === "scoring")) {
         tickerEl.style.display = "";
-        tickerEl.textContent   = (p.phase === "scoring" ? "&#9670; Scoring: " : "&#9675; Checking: ") + p.currentTicker;
+        tickerEl.textContent   = "\u25c6 Scoring: " + p.currentTicker;
       } else {
         tickerEl.style.display = "none";
       }
 
-      if (p.phase === "scoring" || p.phase === "pre-filter") {
+      if (p.phase === "scoring options" || p.phase === "scoring" || p.phase === "pre-filter") {
         statsEl.style.display = "";
         var univEl = document.getElementById("pstat-univ");
         var passEl = document.getElementById("pstat-pass");
@@ -526,7 +529,28 @@
         if (etaEl)  etaEl.textContent  = p.eta > 0 ? "~" + fmtTime(p.eta) : "calculating...";
       }
 
-    } catch (e) { /* silently ignore progress fetch errors */ }
+      // ── KEY FIX: if scan is done, dismiss loading screen immediately ──────
+      if (p.phase === "done" && !p.running) {
+        stopProgPoll();
+        scanDone = true;
+        onScanComplete();
+        // Fetch results one final time to make sure we have them
+        try {
+          var r2   = await fetch(API_BASE + "/api/csp/scan");
+          var dat2 = await r2.json();
+          if (dat2.results && dat2.results.length > 0) {
+            cspResults = dat2.results;
+            updateStatusBar(dat2);
+          }
+        } catch(e2) {}
+        document.getElementById("csp-loading").style.display    = "none";
+        document.getElementById("csp-results").style.display    = cspResults.length ? "" : "none";
+        document.getElementById("csp-empty").style.display      = cspResults.length ? "none" : "";
+        document.getElementById("csp-status-bar").style.display = cspResults.length ? "" : "none";
+        if (cspResults.length) renderCSP();
+      }
+
+    } catch (e) { /* silently ignore */ }
   }
 
   function fmtTime(s) {
