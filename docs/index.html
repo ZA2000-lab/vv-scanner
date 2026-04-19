@@ -345,70 +345,63 @@
     while (true) {
       attempt++;
       try {
-        var res = await fetch(API_BASE + "/api/csp/scan");
+        var res  = await fetch(API_BASE + "/api/csp/scan");
         if (!res.ok) throw new Error("HTTP " + res.status);
         var data = await res.json();
 
         stopConnTimer();
 
-        var isDone = !data.isRefreshing &&
-          data.progress && data.progress.phase === "done";
-        var hasResults = data.results && data.results.length > 0;
-
-        // Always store results if we have them
-        if (hasResults) {
+        // ── If we have results, show them IMMEDIATELY no matter what ──────
+        if (data.results && data.results.length > 0) {
           cspResults = data.results;
-          updateStatusBar(data);
-        }
-
-        if (isDone && hasResults) {
-          // Scan complete, results ready — show them immediately
-          scanDone = true;
           document.getElementById("csp-loading").style.display    = "none";
           document.getElementById("csp-results").style.display    = "";
           document.getElementById("csp-status-bar").style.display = "";
-          onScanComplete();
+          document.getElementById("csp-empty").style.display      = "none";
           renderCSP();
-          return;
-        } else if (isDone && !hasResults) {
-          // Scan done but no results — show empty state
+          updateStatusBar(data);
           scanDone = true;
-          document.getElementById("csp-loading").style.display = "none";
-          document.getElementById("csp-empty").style.display   = "";
           onScanComplete();
-          return;
-        } else {
-          // Scan still running — show progress and keep polling
-          document.getElementById("csp-loading").style.display = "";
-          if (hasResults) {
-            // Show partial results alongside loading screen
-            document.getElementById("csp-results").style.display = "";
-            renderCSP();
+          // If still scanning, keep polling silently in background for fresh results
+          if (data.isRefreshing) {
+            startProgPoll();
+            pollCSP();
           }
+          return;
+        }
+
+        // ── No results yet — scan running or just started ─────────────────
+        var stillRunning = data.isRefreshing ||
+          (data.progress && data.progress.phase !== "done" && data.progress.phase !== "idle");
+
+        if (stillRunning) {
+          document.getElementById("csp-loading").style.display = "";
           startProgPoll();
           pollCSP();
           return;
         }
+
+        // ── No results and scan not running — trigger a fresh scan ────────
+        try { await fetchWithTimeout(API_BASE + "/api/csp/refresh", 10000); } catch(e) {}
+        startProgPoll();
+        pollCSP();
+        return;
 
       } catch (e) {
         var elapsed = Math.floor((Date.now() - connStart) / 1000);
         var titleEl = document.getElementById("load-title");
         var subEl   = document.getElementById("load-sub");
         var msgEl   = document.getElementById("conn-msg");
-
         if (elapsed < 30) {
           if (titleEl) titleEl.textContent = "Connecting to server...";
           if (subEl)   subEl.textContent   = "Attempt " + attempt;
         } else if (elapsed < 120) {
           if (titleEl) titleEl.textContent = "Server is waking up...";
           if (subEl)   subEl.textContent   = "Railway cold start — usually under 60s";
-          if (msgEl)   msgEl.innerHTML     = "Scan will start automatically once connected.";
         } else {
           if (titleEl) titleEl.textContent = "Scan in progress...";
-          if (subEl)   subEl.textContent   = "Server is busy scanning. Still trying...";
-          if (msgEl)   msgEl.innerHTML     = "This can happen during a large scan. Please wait.";
+          if (subEl)   subEl.textContent   = "Server busy scanning. Still trying...";
         }
-
         if (elapsed > 300) showRetryButton();
         await sleep(attempt <= 2 ? 3000 : 6000);
       }
