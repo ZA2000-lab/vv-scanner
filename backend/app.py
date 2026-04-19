@@ -1,3 +1,23 @@
+"""
+VV CSP Scanner
+--------------
+Real 1500-ticker solution using yf.download() bulk API.
+
+Stage 1: yf.download(all ~1500 tickers, period="3mo")
+         → One bulk API call. Returns price + volume for every ticker.
+         → Filter by price > $2, avg vol > 300k → typically ~500-700 pass.
+         → Compute RV from the downloaded close prices (no extra calls).
+         → Sort by volume, take top SCORING_CAP.
+         → Time: ~60-120s for 1500 tickers.
+
+Stage 2: Options chains on the filtered list only.
+         → 4 workers (safe for Railway, avoids Yahoo rate limits).
+         → Each ticker: 2 calls (options list + option_chain).
+         → Time: 300 tickers / 4 workers × ~2.5s each ≈ ~190s.
+
+Total: ~4-5 minutes for 1500 tickers.
+Server: gunicorn --workers 1 --threads 8 (scan uses 4, HTTP uses 4).
+"""
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import yfinance as yf
@@ -12,726 +32,670 @@ import logging
 import os
 
 logging.basicConfig(level=logging.INFO)
-log = logging.getLogger(**name**)
-app = Flask(**name**)
+log = logging.getLogger(__name__)
+app = Flask(__name__)
 CORS(app)
 
 try:
-yf.set_tz_cache_location(”/tmp/yf_tz_cache”)
+    yf.set_tz_cache_location("/tmp/yf_tz_cache")
 except Exception:
-pass
+    pass
 
-# ── Constants ──────────────────────────────────────────────────────────────
-
-CACHE_TTL         = 6 * 3600
-DAYS_AHEAD        = 45
-PREFILTER_WORKERS = 8    # Stage 1 - fast_info checks
-SCORING_WORKERS   = 3    # Stage 2 - MUST stay low: each thread pulls 3 yfinance calls
-# gunicorn has 2 workers x 4 threads = 8 threads total for HTTP
-# so scan threads must leave headroom for HTTP to be served
-SCORING_CAP       = 200  # Hard cap: 200 tickers x ~4s each / 3 workers = ~4.5 min max
+CACHE_TTL      = 6 * 3600
+DAYS_AHEAD     = 45
+SCORING_WORKERS = 4     # workers for options-chain stage only
+SCORING_CAP    = 300    # top N by volume sent to options stage
 
 NASDAQ_HEADERS = {
-“User-Agent”: “Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36”,
-“Accept”: “application/json, text/plain, */*”,
-“Origin”: “https://www.nasdaq.com”,
-“Referer”: “https://www.nasdaq.com/market-activity/earnings”,
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Origin": "https://www.nasdaq.com",
+    "Referer": "https://www.nasdaq.com/market-activity/earnings",
 }
 
 # ── Cache ──────────────────────────────────────────────────────────────────
-
-_csp_cache = {
-“results”:  [],
-“ts”:       0,
-“running”:  False,
-“progress”: {
-“done”: 0, “total”: 0, “phase”: “idle”,
-“currentTicker”: “”, “found”: 0, “scanStart”: 0,
-“passedPrefilter”: 0,
-},
+_cache = {
+    "results":  [],
+    "ts":       0,
+    "running":  False,
+    "progress": {
+        "done": 0, "total": 0, "phase": "idle",
+        "ticker": "", "found": 0, "start": 0,
+        "downloaded": 0, "passed": 0,
+    },
 }
 
-# ── Universe — hardcoded only, NO Wikipedia fetch ──────────────────────────
-
-# ~350 liquid, optionable tickers with good open interest.
-
-# Scanning all of S&P 1500 takes 30+ min. This list covers 95% of useful CSP setups.
-
-UNIVERSE = [
-# Mega-cap tech
-“AAPL”,“MSFT”,“NVDA”,“GOOGL”,“AMZN”,“META”,“TSLA”,“AVGO”,“ORCL”,“AMD”,
-“ADBE”,“CRM”,“INTU”,“NOW”,“PANW”,“CRWD”,“NET”,“DDOG”,“SNOW”,“PLTR”,“MDB”,
-“INTC”,“QCOM”,“TXN”,“AMAT”,“LRCX”,“KLAC”,“MU”,“SMCI”,“ARM”,“ON”,“MRVL”,
-“CSCO”,“IBM”,“DELL”,“HPE”,“ACN”,“VRSK”,“PYPL”,“SQ”,“SHOP”,
-# Financials
-“JPM”,“BAC”,“WFC”,“GS”,“MS”,“C”,“V”,“MA”,“AXP”,“COF”,“SCHW”,“IBKR”,
-“BLK”,“BX”,“KKR”,“APO”,“COIN”,“MSTR”,“HOOD”,“SOFI”,“ALLY”,
-# Healthcare
-“UNH”,“LLY”,“JNJ”,“ABBV”,“MRK”,“PFE”,“AMGN”,“GILD”,“VRTX”,“REGN”,“ISRG”,
-“TMO”,“DHR”,“MRNA”,“BIIB”,“SYK”,“MDT”,“BSX”,“CI”,“ELV”,“HUM”,“CVS”,
-# Energy
-“XOM”,“CVX”,“COP”,“EOG”,“DVN”,“OXY”,“SLB”,“HAL”,“VLO”,“MPC”,“LNG”,
-# Industrials
-“GE”,“HON”,“CAT”,“DE”,“MMM”,“ETN”,“RTX”,“LMT”,“GD”,“NOC”,“BA”,“UPS”,“FDX”,
-“CSX”,“UNP”,“WM”,“SHW”,“EMR”,“TT”,“CARR”,
-# Consumer
-“HD”,“WMT”,“COST”,“TGT”,“MCD”,“SBUX”,“CMG”,“NKE”,“LULU”,“BKNG”,“UBER”,
-“ABNB”,“DIS”,“NFLX”,“EA”,“DKNG”,“MGM”,“GM”,“F”,“RIVN”,“DAL”,“AAL”,“UAL”,
-“ROST”,“TJX”,“BURL”,“DG”,“DLTR”,“LOW”,
-# Staples
-“PG”,“KO”,“PEP”,“PM”,“MO”,“CL”,“KMB”,“EL”,“ULTA”,“TSN”,“SYY”,
-# Utilities / Energy transition
-“NEE”,“DUK”,“SO”,“PCG”,“ENPH”,“FSLR”,
-# Materials
-“LIN”,“FCX”,“NEM”,“GOLD”,“ALB”,“DD”,“DOW”,“NUE”,“STLD”,
-# REITs
-“AMT”,“CCI”,“EQIX”,“DLR”,“SPG”,“O”,“PLD”,“PSA”,“VICI”,
-# Telecom / Media
-“VZ”,“T”,“TMUS”,“SNAP”,“PINS”,“SPOT”,“RDDT”,
-# High-vol / speculative
-“MARA”,“RIOT”,“GME”,“RKLB”,“ASTS”,“SPCE”,“NIO”,“XPEV”,“RIVN”,“LCID”,
-# Mining / metals
-“WPM”,“PAAS”,“KGC”,“AEM”,“CDE”,“HL”,“EGO”,“GFI”,“HMY”,“NGD”,
-# Liquid ETFs — always great CSP candidates
-“SPY”,“QQQ”,“IWM”,“GLD”,“SLV”,“GDX”,“GDXJ”,“TLT”,“HYG”,
-“XLE”,“XLF”,“XLK”,“XLV”,“XLI”,“XLU”,“XLY”,“XLP”,
-“SMH”,“SOXX”,“IBB”,“ARKK”,“EEM”,“EWZ”,“KWEB”,“FXI”,
-“TQQQ”,“SQQQ”,“UVXY”,“VXX”,
+# ── Universe ───────────────────────────────────────────────────────────────
+# Hardcoded liquid names — Wikipedia adds S&P 500/400/600 at startup.
+_EXTRAS = [
+    "CDE",
+    "AAPL","MSFT","NVDA","GOOGL","AMZN","META","TSLA","AVGO","ORCL","AMD",
+    "ADBE","CRM","INTU","NOW","PANW","CRWD","NET","DDOG","SNOW","PLTR","MDB",
+    "INTC","QCOM","TXN","AMAT","LRCX","KLAC","MU","SMCI","ARM","ON","MRVL",
+    "CSCO","IBM","DELL","HPE","ACN","VRSK","PYPL","SQ","SHOP",
+    "JPM","BAC","WFC","GS","MS","C","V","MA","AXP","COF","SCHW","IBKR",
+    "BLK","BX","KKR","APO","COIN","MSTR","HOOD","SOFI","ALLY","DFS","SYF",
+    "UNH","LLY","JNJ","ABBV","MRK","PFE","AMGN","GILD","VRTX","REGN","ISRG",
+    "TMO","DHR","MRNA","BIIB","SYK","MDT","BSX","CI","ELV","HUM","CVS","CNC","MOH",
+    "XOM","CVX","COP","EOG","DVN","OXY","HES","SLB","HAL","VLO","MPC","LNG","EQT",
+    "GE","HON","CAT","DE","MMM","ETN","PH","RTX","LMT","GD","NOC","BA","UPS","FDX",
+    "CSX","UNP","WM","SHW","EMR","TT","CARR","OTIS","ROK","ITW","DOV","AME",
+    "HD","WMT","COST","TGT","MCD","SBUX","CMG","YUM","NKE","LULU","DECK","ONON",
+    "BKNG","EXPE","ABNB","UBER","LYFT","DASH","ETSY","EBAY","CHWY",
+    "DIS","NFLX","CMCSA","EA","TTWO","DKNG","MGM","WYNN","LYV","RBLX",
+    "GM","F","RIVN","NIO","LCID","XPEV","LI","DAL","AAL","UAL","CCL","RCL",
+    "ROST","TJX","BURL","DG","DLTR","LOW","KSS","JWN","ANF","AEO","GPS","URBN",
+    "PG","KO","PEP","PM","MO","MDLZ","KHC","GIS","CL","CHD","KMB","CLX",
+    "EL","ULTA","BBWI","TSN","HRL","MKC","SJM","CPB","SYY",
+    "NEE","DUK","SO","D","AEP","EXC","XEL","PCG","EIX","PPL","AES","WEC",
+    "ENPH","FSLR","RUN","SEDG",
+    "LIN","APD","CF","NTR","FCX","NEM","GOLD","AEM","KGC","WPM","PAAS",
+    "NUE","STLD","CLF","DD","DOW","LYB","ALB","MP","ECL","SHW",
+    "AMT","CCI","EQIX","SBAC","DLR","IRM","SPG","O","VICI","PLD","PSA",
+    "EXR","EQR","AVB","WELL","VTR","OHI","ARE","BXP",
+    "VZ","T","TMUS","SNAP","PINS","SPOT","RDDT",
+    "HOOD","SOFI","MARA","RIOT","GME","AMC","SPCE","RKLB","ASTS",
+    "WPM","PAAS","EGO","IAG","AU","HL","SILV","FSM","NGD","GFI","HMY","SBSW",
+    "SPY","QQQ","IWM","DIA","MDY","VTI","VOO","IVV","RSP",
+    "GLD","SLV","GDX","GDXJ","IAU",
+    "TLT","IEF","LQD","HYG","JNK","AGG","BND",
+    "XLE","XLF","XLK","XLV","XLI","XLU","XLRE","XLB","XLY","XLP","XLC",
+    "SMH","SOXX","IBB","ARKK","ARKG","EEM","EFA","EWZ","EWJ","FXI","KWEB","MCHI",
+    "USO","UNG","CPER","VXX","UVXY","TQQQ","SQQQ","UPRO","SSO",
 ]
 
-# ── Yang-Zhang Realized Volatility ─────────────────────────────────────────
+UNIVERSE = list(_EXTRAS)
+_uni_lock = threading.Lock()
 
-def yang_zhang(df, window=20, tp=252):
-try:
-if len(df) < window + 2:
-return float(df[“Close”].pct_change().std() * np.sqrt(tp))
-lho  = (df[“High”]  / df[“Open”]).apply(np.log)
-llo  = (df[“Low”]   / df[“Open”]).apply(np.log)
-lco  = (df[“Close”] / df[“Open”]).apply(np.log)
-loc_ = (df[“Open”]  / df[“Close”].shift(1)).apply(np.log)
-lcc  = (df[“Close”] / df[“Close”].shift(1)).apply(np.log)
-rs   = lho*(lho-lco) + llo*(llo-lco)
-cv   = (lcc**2).rolling(window).sum() / (window-1)
-ov   = (loc_**2).rolling(window).sum() / (window-1)
-wr   = rs.rolling(window).sum() / (window-1)
-k    = 0.34 / (1.34 + (window+1)/(window-1))
-return float(((ov + k*cv + (1-k)*wr).apply(np.sqrt) * np.sqrt(tp)).iloc[-1])
-except Exception:
-return 0.25
 
-# ── Earnings date ──────────────────────────────────────────────────────────
-
-def get_earnings_date(stock, sym, today_d, earnings_map):
-“””
-Returns (display_str, days_int) or (None, None).
-Only uses yfinance .calendar (cached) and pre-fetched Nasdaq map — no extra HTTP calls.
-“””
-candidates = []
-try:
-cal = stock.calendar
-if isinstance(cal, dict):
-earn_list = cal.get(“Earnings Date”, [])
-if not isinstance(earn_list, list):
-earn_list = [earn_list]
-for ed in earn_list:
-if ed is None:
-continue
-if hasattr(ed, “date”):
-ed = ed.date()
-elif isinstance(ed, str):
-try:
-ed = datetime.strptime(ed[:10], “%Y-%m-%d”).date()
-except Exception:
-continue
-days = (ed - today_d).days
-if -5 <= days <= 180:
-candidates.append((days, ed.strftime(”%b %d”)))
-break
-elif isinstance(cal, pd.DataFrame) and not cal.empty:
-for col in cal.columns:
-try:
-ed   = pd.Timestamp(col).date()
-days = (ed - today_d).days
-if -5 <= days <= 180:
-candidates.append((days, ed.strftime(”%b %d”)))
-break
-except Exception:
-pass
-except Exception:
-pass
-
-```
-if sym in earnings_map:
-    nd_str, nd_days = earnings_map[sym]
-    if nd_days is not None and -2 <= nd_days <= 180:
-        candidates.append((nd_days, nd_str))
-
-if not candidates:
-    return None, None
-candidates.sort(key=lambda x: x[0])
-return candidates[0][1], candidates[0][0]
-```
-
-# ── Nasdaq calendar ────────────────────────────────────────────────────────
-
-def fetch_nasdaq_calendar():
-earnings_map = {}
-today    = date.today()
-deadline = time.time() + 60
-session  = requests.Session()
-session.headers.update(NASDAQ_HEADERS)
-d = today
-while d <= today + timedelta(days=DAYS_AHEAD):
-if time.time() > deadline:
-log.warning(“Nasdaq calendar: 60s deadline hit at %s”, d)
-break
-if d.weekday() < 5:
-try:
-resp = session.get(
-“https://api.nasdaq.com/api/calendar/earnings?date=” + d.strftime(”%Y-%m-%d”),
-timeout=4)
-if resp.status_code == 200:
-rows = (resp.json().get(“data”) or {}).get(“rows”) or []
-diff = (d - today).days
-for row in rows:
-sym = (row.get(“symbol”) or “”).upper().strip().replace(”/”, “-”)
-if sym and 1 <= len(sym) <= 6 and sym.replace(”-”,””).isalpha():
-if sym not in earnings_map:
-earnings_map[sym] = (d.strftime(”%b %d”), diff)
-time.sleep(0.05)
-except Exception as e:
-log.debug(“Nasdaq cal %s: %s”, d, e)
-d += timedelta(days=1)
-log.info(“Nasdaq calendar: %d tickers”, len(earnings_map))
-return earnings_map
-
-# ── Stage 1: Fast prefilter ────────────────────────────────────────────────
-
-def fast_prefilter(sym):
-“”“Returns (price, vol) if passes, else None. Uses fast_info only.”””
-try:
-fi = yf.Ticker(sym).fast_info
-px = None
-for attr in (“last_price”, “previous_close”, “regular_market_price”):
-v = getattr(fi, attr, None)
-if v is not None:
-try:
-f = float(v)
-if f > 0:
-px = f
-break
-except Exception:
-pass
-if px is None or px < 2:
-return None
-
-```
-    vol = None
-    for attr in ("three_month_average_volume", "regular_market_volume",
-                 "average_volume", "average_daily_volume3_month"):
-        v = getattr(fi, attr, None)
-        if v is not None:
-            try:
-                f = float(v)
-                if f > 0:
-                    vol = f
-                    break
-            except Exception:
-                pass
-
-    # volume fallback: quick 5d history
-    if not vol:
-        h = yf.Ticker(sym).history(period="5d")
-        if h.empty:
-            return None
-        vol = float(h["Volume"].mean())
-
-    if vol < 500_000:
-        return None
-    return (px, vol)
-except Exception:
-    return None
-```
-
-# ── Stage 2: Full CSP scorer ───────────────────────────────────────────────
-
-def score_csp_ticker(sym, earnings_map):
-“”“3 yfinance calls: history(3mo), options list, option_chain.”””
-try:
-stock   = yf.Ticker(sym)
-today_d = date.today()
-
-```
-    # History — 3mo is enough for RV; much faster than 6mo/1y
-    hist = stock.history(period="3mo")
-    if hist.empty or len(hist) < 30:
-        return None
-    price = float(hist["Close"].iloc[-1])
-    if price <= 0:
-        return None
-
-    avg_vol = float(hist["Volume"].tail(20).mean())
-    if avg_vol < 500_000:
-        return None
-
-    rv30 = yang_zhang(hist, window=20)
-
-    # IV rank proxy from 3mo RV range
-    rv_series = hist["Close"].pct_change().rolling(20).std() * (252 ** 0.5)
-    rv_series = rv_series.dropna()
-    if rv_series.empty:
-        return None
-    rv_min = float(rv_series.quantile(0.10))
-    rv_max = float(rv_series.quantile(0.90))
-
-    # Options expiries
+def _load_wiki(url, name):
     try:
-        opts = stock.options
-    except Exception:
-        return None
-    if not opts:
-        return None
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+        if resp.status_code != 200:
+            return []
+        for df in pd.read_html(resp.text):
+            cols = [str(c).lower() for c in df.columns]
+            col = next((df.columns[i] for i, c in enumerate(cols)
+                        if c in ("symbol","ticker","symbol[3]","ticker symbol")), None)
+            if col is None:
+                continue
+            tickers = (df[col].astype(str)
+                       .str.split(r"[\s\[]").str[0]
+                       .str.replace(r"\..*","",regex=True)
+                       .str.upper().str.strip().tolist())
+            tickers = [t.replace(".","-") for t in tickers
+                       if 1 <= len(t) <= 6 and t.replace("-","").isalpha()]
+            if len(tickers) > 10:
+                log.info("Wiki %s: %d tickers", name, len(tickers))
+                return tickers
+    except Exception as e:
+        log.warning("Wiki %s: %s", name, e)
+    return []
 
-    # Best expiry: 28-55 DTE preferred
-    target_exp, target_dte = None, None
-    for exp in sorted(opts):
-        try:
-            dte = (datetime.strptime(exp, "%Y-%m-%d").date() - today_d).days
-            if 28 <= dte <= 55:
-                target_exp, target_dte = exp, dte
-                break
-        except Exception:
+
+def _build_universe():
+    global UNIVERSE
+    log.info("Loading Wikipedia universe...")
+    wiki = []
+    for name, url in [
+        ("sp500",    "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"),
+        ("sp400",    "https://en.wikipedia.org/wiki/List_of_S%26P_400_companies"),
+        ("sp600",    "https://en.wikipedia.org/wiki/List_of_S%26P_600_companies"),
+        ("nasdaq100","https://en.wikipedia.org/wiki/Nasdaq-100"),
+    ]:
+        wiki.extend(_load_wiki(url, name))
+
+    combined = _EXTRAS + wiki
+    seen, result = set(), []
+    for t in combined:
+        if t not in seen:
+            seen.add(t)
+            result.append(t)
+    with _uni_lock:
+        UNIVERSE = result
+    log.info("Universe ready: %d tickers", len(result))
+
+
+threading.Thread(target=_build_universe, daemon=True).start()
+
+
+# ── Earnings calendar ──────────────────────────────────────────────────────
+
+def fetch_earnings_map():
+    out = {}
+    today = date.today()
+    s = requests.Session()
+    s.headers.update(NASDAQ_HEADERS)
+    deadline = time.time() + 60
+    for delta in range(DAYS_AHEAD + 1):
+        if time.time() > deadline:
+            break
+        d = today + timedelta(days=delta)
+        if d.weekday() >= 5:
             continue
-    if not target_exp:
-        for exp in sorted(opts):
+        try:
+            r = s.get(
+                "https://api.nasdaq.com/api/calendar/earnings?date=" + d.strftime("%Y-%m-%d"),
+                timeout=4)
+            if r.status_code == 200:
+                for row in (r.json().get("data") or {}).get("rows") or []:
+                    sym = (row.get("symbol") or "").upper().strip().replace("/","-")
+                    if sym and sym not in out:
+                        out[sym] = (d.strftime("%b %d"), delta)
+            time.sleep(0.05)
+        except Exception:
+            pass
+    log.info("Earnings map: %d tickers", len(out))
+    return out
+
+
+def get_earn(stock, sym, today_d, emap):
+    cands = []
+    try:
+        cal = stock.calendar
+        if isinstance(cal, dict):
+            for ed in (cal.get("Earnings Date") or []):
+                if ed is None:
+                    continue
+                if hasattr(ed, "date"):
+                    ed = ed.date()
+                elif isinstance(ed, str):
+                    try: ed = datetime.strptime(ed[:10],"%Y-%m-%d").date()
+                    except: continue
+                days = (ed - today_d).days
+                if -5 <= days <= 180:
+                    cands.append((days, ed.strftime("%b %d")))
+                    break
+        elif isinstance(cal, pd.DataFrame) and not cal.empty:
+            for col in cal.columns:
+                try:
+                    ed   = pd.Timestamp(col).date()
+                    days = (ed - today_d).days
+                    if -5 <= days <= 180:
+                        cands.append((days, ed.strftime("%b %d")))
+                        break
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    if sym in emap:
+        nd_str, nd_days = emap[sym]
+        if -2 <= nd_days <= 180:
+            cands.append((nd_days, nd_str))
+    if not cands:
+        return None, None
+    cands.sort()
+    return cands[0][1], cands[0][0]
+
+
+# ── Options scoring (Stage 2) ──────────────────────────────────────────────
+
+def score_options(sym, price, rv30, rv_lo, rv_hi, avg_vol, emap):
+    """
+    Only fetches options data — price/vol/rv already computed from bulk download.
+    Makes 2 API calls: stock.options + stock.option_chain(exp).
+    """
+    try:
+        stock   = yf.Ticker(sym)
+        today_d = date.today()
+
+        opts = stock.options
+        if not opts:
+            return None
+
+        exp, dte = None, None
+        for e in sorted(opts):
             try:
-                dte = (datetime.strptime(exp, "%Y-%m-%d").date() - today_d).days
-                if dte >= 21:
-                    target_exp, target_dte = exp, dte
+                d = (datetime.strptime(e,"%Y-%m-%d").date() - today_d).days
+                if 28 <= d <= 55:
+                    exp, dte = e, d
                     break
             except Exception:
                 continue
-    if not target_exp:
-        return None
+        if not exp:
+            for e in sorted(opts):
+                try:
+                    d = (datetime.strptime(e,"%Y-%m-%d").date() - today_d).days
+                    if d >= 21:
+                        exp, dte = e, d
+                        break
+                except Exception:
+                    continue
+        if not exp:
+            return None
 
-    # Put chain
-    try:
-        puts = stock.option_chain(target_exp).puts
-    except Exception:
-        return None
-    if puts is None or puts.empty:
-        return None
+        puts = stock.option_chain(exp).puts
+        if puts is None or puts.empty:
+            return None
 
-    atm_idx = (puts["strike"] - price).abs().idxmin()
-    atm_iv  = float(puts.loc[atm_idx, "impliedVolatility"])
-    if atm_iv <= 0 or atm_iv > 5.0:
-        return None
+        idx    = (puts["strike"] - price).abs().idxmin()
+        atm_iv = float(puts.loc[idx, "impliedVolatility"])
+        if atm_iv <= 0 or atm_iv > 5:
+            return None
 
-    iv_rank = (int(min(100, max(0, (atm_iv - rv_min) / (rv_max - rv_min) * 100)))
-               if rv_max > rv_min else 50)
-    iv_rv_ratio = round(atm_iv / rv30, 2) if rv30 > 0 else 1.0
+        iv_rank = int(min(100, max(0,
+            (atm_iv - rv_lo) / (rv_hi - rv_lo) * 100))) if rv_hi > rv_lo else 50
+        ivrv    = round(atm_iv / rv30, 2) if rv30 > 0 else 1.0
 
-    # ~30-delta put strike
-    T = target_dte / 365.0
-    target_strike_raw = price * (1 - 0.45 * atm_iv * (T ** 0.5))
-    otm_puts = puts[puts["strike"] <= price * 1.02].copy()
-    if otm_puts.empty:
-        return None
-    otm_puts["dist"] = (otm_puts["strike"] - target_strike_raw).abs()
-    best_row   = otm_puts.loc[otm_puts["dist"].idxmin()]
-    put_strike = float(best_row["strike"])
+        T  = dte / 365.0
+        sk = price * (1 - 0.45 * atm_iv * T**0.5)
+        op = puts[puts["strike"] <= price * 1.02].copy()
+        if op.empty:
+            return None
+        op["_d"] = (op["strike"] - sk).abs()
+        row = op.loc[op["_d"].idxmin()]
+        put_strike = float(row["strike"])
 
-    bid  = float(best_row.get("bid",  0) or 0)
-    ask  = float(best_row.get("ask",  0) or 0)
-    oi   = int(best_row.get("openInterest", 0) or 0)
-    iv_p = float(best_row.get("impliedVolatility", atm_iv) or atm_iv)
+        bid  = float(row.get("bid",  0) or 0)
+        ask  = float(row.get("ask",  0) or 0)
+        oi   = int(row.get("openInterest", 0) or 0)
+        iv_p = float(row.get("impliedVolatility", atm_iv) or atm_iv)
 
-    if bid > 0 and ask > 0:
-        mid = round((bid + ask) / 2, 2)
-    else:
-        mid = round(price * iv_p * (T ** 0.5) * 0.40 * ((put_strike / price) ** 0.5), 2)
+        mid = round((bid+ask)/2, 2) if bid>0 and ask>0 else \
+              round(price * iv_p * T**0.5 * 0.40 * (put_strike/price)**0.5, 2)
+        if mid < 0.05:
+            return None
 
-    if mid < 0.05:
-        return None
+        spread = round((ask-bid)/mid*100, 1) if mid>0 and ask>bid else 0
+        be     = round(put_strike - mid, 2)
+        coll   = put_strike * 100
+        roc    = round(mid*100/coll*100, 2) if coll>0 else 0
+        roc_a  = round(roc * 365/dte, 1)  if dte>0  else 0
 
-    spread_pct = round((ask - bid) / mid * 100, 1) if (mid > 0 and ask > bid) else 0
-    breakeven  = round(put_strike - mid, 2)
-    collateral = put_strike * 100
-    roc_pct    = round(mid * 100 / collateral * 100, 2) if collateral > 0 else 0
-    roc_ann    = round(roc_pct * (365 / target_dte), 1) if target_dte > 0 else 0
+        estr, edays = get_earn(stock, sym, today_d, emap)
+        earn_in     = edays is not None and edays <= dte
 
-    earn_str, earn_days = get_earnings_date(stock, sym, today_d, earnings_map)
-    earn_within = (earn_days is not None and earn_days <= target_dte)
+        if earn_in or spread > 20 or iv_rank < 45:
+            q = "SKIP"
+        elif iv_rank >= 60 and ivrv >= 1.2 and spread <= 10:
+            q = "STRONG"
+        else:
+            q = "DECENT"
 
-    if earn_within or spread_pct > 20 or iv_rank < 45:
-        quality = "SKIP"
-    elif iv_rank >= 60 and iv_rv_ratio >= 1.2 and spread_pct <= 10:
-        quality = "STRONG"
-    else:
-        quality = "DECENT"
+        try:    name = getattr(stock.fast_info, "company_name", None) or sym
+        except: name = sym
 
-    try:
-        name = getattr(stock.fast_info, "company_name", None) or sym
-    except Exception:
-        name = sym
-
-    return {
-        "ticker":        sym,
-        "name":          name,
-        "price":         round(price, 2),
-        "quality":       quality,
-        "ivRank":        iv_rank,
-        "ivRvRatio":     iv_rv_ratio,
-        "putStrike":     put_strike,
-        "expiration":    target_exp,
-        "dte":           target_dte,
-        "premium":       mid,
-        "bid":           round(bid, 2),
-        "ask":           round(ask, 2),
-        "spreadPct":     spread_pct,
-        "openInterest":  oi,
-        "breakeven":     breakeven,
-        "rocPct":        roc_pct,
-        "rocAnn":        roc_ann,
-        "collateral":    int(collateral),
-        "avgVol":        int(avg_vol),
-        "atm_iv":        round(atm_iv * 100, 1),
-        "rv30":          round(rv30 * 100, 1),
-        "earningsWithin":earn_within,
-        "earningsDate":  earn_str,
-        "earningsDays":  earn_days,
-        "profitTarget":  round(mid * 0.50 * 100, 2),
-        "stopLoss":      round(mid * 2.0  * 100, 2),
-    }
-except Exception as e:
-    log.debug("CSP %s: %s", sym, e)
-    return None
-```
-
-# ── Sort helper ────────────────────────────────────────────────────────────
-
-def _sort(results):
-return sorted(results,
-key=lambda x: ({“STRONG”:0,“DECENT”:1,“SKIP”:2}.get(x[“quality”],3), -x[“rocAnn”]))
-
-# ── Scan orchestrator ──────────────────────────────────────────────────────
-
-def run_csp_scan():
-if _csp_cache[“running”]:
-return
-_csp_cache[“running”] = True
-_csp_cache[“results”] = []
-scan_start = time.time()
-
-```
-_csp_cache["progress"] = {
-    "done": 0, "total": 0, "phase": "starting",
-    "currentTicker": "", "found": 0, "scanStart": scan_start,
-    "passedPrefilter": 0,
-}
-
-universe = list(UNIVERSE)
-log.info("Scan start — %d tickers", len(universe))
-
-# Nasdaq calendar runs concurrently with Stage 1
-earnings_map = {}
-cal_done = threading.Event()
-
-def fetch_cal():
-    try:
-        result = fetch_nasdaq_calendar()
-        earnings_map.update(result)
+        return {
+            "ticker":        sym,
+            "name":          name,
+            "price":         round(price, 2),
+            "quality":       q,
+            "ivRank":        iv_rank,
+            "ivRvRatio":     ivrv,
+            "putStrike":     put_strike,
+            "expiration":    exp,
+            "dte":           dte,
+            "premium":       mid,
+            "bid":           round(bid, 2),
+            "ask":           round(ask, 2),
+            "spreadPct":     spread,
+            "openInterest":  oi,
+            "breakeven":     be,
+            "rocPct":        roc,
+            "rocAnn":        roc_a,
+            "collateral":    int(coll),
+            "avgVol":        int(avg_vol),
+            "atm_iv":        round(atm_iv*100, 1),
+            "rv30":          round(rv30*100, 1),
+            "earningsWithin":earn_in,
+            "earningsDate":  estr,
+            "earningsDays":  edays,
+            "profitTarget":  round(mid*0.50*100, 2),
+            "stopLoss":      round(mid*2.0*100, 2),
+        }
     except Exception as e:
-        log.warning("Calendar bg: %s", e)
-    finally:
-        cal_done.set()
+        log.debug("options %s: %s", sym, e)
+        return None
 
-threading.Thread(target=fetch_cal, daemon=True).start()
 
-# Stage 1: fast prefilter
-_csp_cache["progress"].update({
-    "done": 0, "total": len(universe), "phase": "pre-filter",
-})
+def _sort(lst):
+    return sorted(lst,
+        key=lambda x: ({"STRONG":0,"DECENT":1,"SKIP":2}.get(x["quality"],3), -x["rocAnn"]))
 
-passed = []
-passed_vols = {}
-lock1 = threading.Lock()
 
-def prefilter_one(sym):
-    ok = fast_prefilter(sym)
-    with lock1:
-        _csp_cache["progress"]["done"] += 1
-        _csp_cache["progress"]["currentTicker"] = sym
-        if ok:
-            px, vol = ok
-            passed.append(sym)
-            passed_vols[sym] = vol
-            _csp_cache["progress"]["passedPrefilter"] = len(passed)
+# ── Main scan ──────────────────────────────────────────────────────────────
 
-with concurrent.futures.ThreadPoolExecutor(max_workers=PREFILTER_WORKERS) as pool:
-    futs = [pool.submit(prefilter_one, sym) for sym in universe]
-    for f in concurrent.futures.as_completed(futs):
-        try: f.result()
+def run_scan():
+    if _cache["running"]:
+        return
+    _cache["running"] = True
+    _cache["results"] = []
+    t0 = time.time()
+
+    # Wait up to 20s for Wikipedia universe to finish loading
+    deadline = time.time() + 20
+    while len(UNIVERSE) <= len(_EXTRAS) and time.time() < deadline:
+        time.sleep(1)
+
+    universe = list(UNIVERSE)
+    log.info("Scan start — %d tickers", len(universe))
+
+    _cache["progress"] = {
+        "done": 0, "total": len(universe), "phase": "bulk download",
+        "ticker": "", "found": 0, "start": t0,
+        "downloaded": 0, "passed": 0,
+    }
+
+    # ── Earnings calendar runs concurrently with bulk download ────────────
+    emap = {}
+    cal_done = threading.Event()
+    def _cal():
+        try: emap.update(fetch_earnings_map())
         except Exception: pass
+        finally: cal_done.set()
+    threading.Thread(target=_cal, daemon=True).start()
 
-log.info("Stage 1: %d / %d passed prefilter", len(passed), len(universe))
+    # ─────────────────────────────────────────────────────────────────────
+    # STAGE 1: yf.download() — bulk price + volume for all tickers at once
+    # This is the key insight: one API call instead of 1500 individual calls.
+    # yfinance batches internally and Yahoo returns efficiently.
+    # ─────────────────────────────────────────────────────────────────────
+    log.info("Stage 1: bulk downloading %d tickers...", len(universe))
 
-if not passed:
-    log.error("Zero passed prefilter — yfinance connectivity issue")
-    _csp_cache["running"] = False
-    _csp_cache["progress"]["phase"] = "done"
-    return
+    try:
+        raw = yf.download(
+            tickers       = universe,
+            period        = "3mo",
+            interval      = "1d",
+            group_by      = "ticker",
+            auto_adjust   = True,
+            threads       = True,
+            progress      = False,
+            timeout       = 120,
+        )
+    except Exception as e:
+        log.error("Bulk download failed: %s", e)
+        _cache["running"] = False
+        _cache["progress"]["phase"] = "done"
+        return
 
-# Sort by volume, cap at SCORING_CAP
-sorted_passed = sorted(passed, key=lambda s: -passed_vols.get(s, 0))
-to_score = sorted_passed[:SCORING_CAP]
-log.info("Stage 2: scoring %d tickers (cap %d)", len(to_score), SCORING_CAP)
+    elapsed_dl = time.time() - t0
+    log.info("Bulk download complete in %.1fs", elapsed_dl)
 
-# Wait for calendar (should be done by now, max 15s extra)
-cal_done.wait(timeout=15)
-log.info("Calendar ready: %d entries", len(earnings_map))
+    # ── Parse bulk data and filter ────────────────────────────────────────
+    candidates = []  # list of (sym, price, vol, rv30, rv_lo, rv_hi)
 
-# Stage 2: full scoring
-_csp_cache["progress"].update({
-    "done": 0, "total": len(to_score), "phase": "scoring",
-    "currentTicker": "", "found": 0,
-})
+    # Handle both single-ticker (flat) and multi-ticker (MultiIndex) returns
+    is_multi = isinstance(raw.columns, pd.MultiIndex)
 
-results = []
-lock2 = threading.Lock()
+    for sym in universe:
+        try:
+            if is_multi:
+                if sym not in raw.columns.get_level_values(0):
+                    continue
+                h = raw[sym].dropna(how="all")
+            else:
+                # Single ticker returned as flat DataFrame
+                h = raw.dropna(how="all")
 
-def score_one(sym):
-    r = score_csp_ticker(sym, earnings_map)
-    with lock2:
-        _csp_cache["progress"]["done"] += 1
-        _csp_cache["progress"]["currentTicker"] = sym
-        if r:
-            results.append(r)
-            _csp_cache["progress"]["found"] = len(results)
-            _csp_cache["results"] = _sort(results)
+            if len(h) < 20:
+                continue
 
-with concurrent.futures.ThreadPoolExecutor(max_workers=SCORING_WORKERS) as pool:
-    futs = [pool.submit(score_one, sym) for sym in to_score]
-    for f in concurrent.futures.as_completed(futs):
-        try: f.result()
-        except Exception: pass
+            price = float(h["Close"].iloc[-1])
+            if price < 2 or np.isnan(price):
+                continue
 
-_csp_cache["results"]  = _sort(results)
-_csp_cache["ts"]       = time.time()
-_csp_cache["running"]  = False
-_csp_cache["progress"].update({
-    "done": len(to_score), "total": len(to_score),
-    "phase": "done", "found": len(results),
-})
-elapsed = int(time.time() - scan_start)
-log.info("Scan done: %d results / %d scored / %ds", len(results), len(to_score), elapsed)
-```
+            avg_vol = float(h["Volume"].tail(20).mean())
+            if avg_vol < 300_000 or np.isnan(avg_vol):
+                continue
+
+            # RV from close prices (no extra API call needed)
+            close = h["Close"].dropna()
+            rets  = close.pct_change().dropna()
+            if len(rets) < 10:
+                continue
+            rv30 = float(rets.tail(20).std() * np.sqrt(252))
+
+            rv_series = rets.rolling(20).std().dropna() * np.sqrt(252)
+            rv_lo = float(rv_series.quantile(0.10)) if len(rv_series) > 5 else rv30 * 0.7
+            rv_hi = float(rv_series.quantile(0.90)) if len(rv_series) > 5 else rv30 * 1.3
+
+            candidates.append((sym, price, avg_vol, rv30, rv_lo, rv_hi))
+
+        except Exception:
+            continue
+
+    log.info("Stage 1 filter: %d / %d tickers passed", len(candidates), len(universe))
+    _cache["progress"]["downloaded"] = len(universe)
+    _cache["progress"]["passed"]     = len(candidates)
+
+    if not candidates:
+        log.error("No tickers passed bulk filter")
+        _cache["running"] = False
+        _cache["progress"]["phase"] = "done"
+        return
+
+    # Sort by volume, take top SCORING_CAP
+    candidates.sort(key=lambda x: -x[2])
+    to_score = candidates[:SCORING_CAP]
+    log.info("Stage 2: scoring options on top %d tickers...", len(to_score))
+
+    # Wait for earnings calendar (should be done by now)
+    cal_done.wait(timeout=10)
+    log.info("Calendar ready: %d entries", len(emap))
+
+    # ─────────────────────────────────────────────────────────────────────
+    # STAGE 2: Options chains — 4 parallel workers, each ticker 2 API calls
+    # ─────────────────────────────────────────────────────────────────────
+    _cache["progress"].update({
+        "done": 0, "total": len(to_score), "phase": "scoring options",
+        "ticker": "", "found": 0,
+    })
+
+    results = []
+    lock    = threading.Lock()
+
+    def score_one(item):
+        sym, price, avg_vol, rv30, rv_lo, rv_hi = item
+        r = score_options(sym, price, rv30, rv_lo, rv_hi, avg_vol, emap)
+        with lock:
+            _cache["progress"]["done"]   += 1
+            _cache["progress"]["ticker"]  = sym
+            if r:
+                results.append(r)
+                _cache["progress"]["found"] = len(results)
+                _cache["results"] = _sort(results)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=SCORING_WORKERS) as pool:
+        futs = [pool.submit(score_one, item) for item in to_score]
+        for f in concurrent.futures.as_completed(futs):
+            try: f.result()
+            except Exception: pass
+
+    _cache["results"]  = _sort(results)
+    _cache["ts"]       = time.time()
+    _cache["running"]  = False
+    _cache["progress"].update({
+        "done":  len(to_score), "phase": "done", "found": len(results),
+    })
+    log.info("Scan done: %d results / %d scored / %d universe / %.0fs",
+             len(results), len(to_score), len(universe), time.time()-t0)
+
 
 # ── API endpoints ──────────────────────────────────────────────────────────
 
-def _maybe_start():
-if not _csp_cache[“running”] and (
-not _csp_cache[“ts”] or time.time() - _csp_cache[“ts”] > CACHE_TTL
-):
-threading.Thread(target=run_csp_scan, daemon=True).start()
+def _auto_start():
+    if not _cache["running"] and (
+        not _cache["ts"] or time.time() - _cache["ts"] > CACHE_TTL
+    ):
+        threading.Thread(target=run_scan, daemon=True).start()
 
-@app.route(”/api/csp/scan”)
-@app.route(”/api/scan”)
-def api_csp_scan():
-_maybe_start()
-return jsonify({
-“results”:      _csp_cache[“results”],
-“count”:        len(_csp_cache[“results”]),
-“scannedAt”:    (datetime.fromtimestamp(_csp_cache[“ts”]).strftime(”%b %d %Y, %I:%M %p”)
-if _csp_cache[“ts”] else None),
-“ageMinutes”:   int((time.time() - _csp_cache[“ts”]) / 60) if _csp_cache[“ts”] else 0,
-“isRefreshing”: _csp_cache[“running”],
-“universe”:     len(UNIVERSE),
-“progress”:     _csp_cache[“progress”],
-})
 
-@app.route(”/api/csp/progress”)
-@app.route(”/api/progress”)
-def api_csp_progress():
-p       = _csp_cache[“progress”]
-pct     = int(p[“done”] / p[“total”] * 100) if p[“total”] > 0 else 0
-elapsed = int(time.time() - p.get(“scanStart”, time.time())) if _csp_cache[“running”] else 0
-eta_s   = None
-if p[“phase”] == “scoring” and p[“done”] > 2 and elapsed > 0:
-rate  = p[“done”] / elapsed
-eta_s = int((p[“total”] - p[“done”]) / rate) if rate > 0 else None
+@app.route("/api/csp/scan")
+@app.route("/api/scan")
+def api_scan():
+    _auto_start()
+    return jsonify({
+        "results":      _cache["results"],
+        "count":        len(_cache["results"]),
+        "scannedAt":    datetime.fromtimestamp(_cache["ts"]).strftime("%b %d %Y, %I:%M %p") if _cache["ts"] else None,
+        "ageMinutes":   int((time.time()-_cache["ts"])/60) if _cache["ts"] else 0,
+        "isRefreshing": _cache["running"],
+        "universe":     len(UNIVERSE),
+        "progress":     _cache["progress"],
+    })
 
-```
-labels = {
-    "starting":    "Starting scan...",
-    "pre-filter":  f"Stage 1 of 2: Quick price & volume check — {p.get('passedPrefilter',0)} tickers passed so far",
-    "scoring":     f"Stage 2 of 2: Scoring options — {p['done']}/{p['total']} done · {p.get('found',0)} setups found",
-    "done":        "Scan complete ✓",
-    "idle":        "Ready",
-}
 
-return jsonify({
-    "done":          p["done"],
-    "total":         p["total"],
-    "pct":           pct,
-    "phase":         p["phase"],
-    "phaseLabel":    labels.get(p["phase"], p["phase"]),
-    "currentTicker": p.get("currentTicker", ""),
-    "found":         p.get("found", 0),
-    "passed":        p.get("passedPrefilter", 0),
-    "elapsed":       elapsed,
-    "eta":           eta_s,
-    "universe":      len(UNIVERSE),
-    "running":       _csp_cache["running"],
-})
-```
+@app.route("/api/csp/progress")
+@app.route("/api/progress")
+def api_progress():
+    p   = _cache["progress"]
+    tot = max(p["total"], 1)
+    pct = int(p["done"] / tot * 100)
+    ela = int(time.time() - p.get("start", time.time())) if _cache["running"] else 0
+    eta = None
+    if p["phase"] == "scoring options" and p["done"] > 2 and ela > 0:
+        rate = p["done"] / ela
+        eta  = int((tot - p["done"]) / rate) if rate > 0 else None
 
-@app.route(”/api/csp/refresh”, methods=[“POST”])
-@app.route(”/api/refresh”, methods=[“POST”])
-def api_csp_refresh():
-if _csp_cache[“running”]:
-return jsonify({“message”: “Already running”, “running”: True}), 202
-_csp_cache[“ts”]      = 0
-_csp_cache[“results”] = []
-threading.Thread(target=run_csp_scan, daemon=True).start()
-return jsonify({“message”: “Started”, “universe”: len(UNIVERSE)}), 200
+    labels = {
+        "bulk download":   f"Stage 1 of 2: Bulk downloading {len(UNIVERSE):,} tickers at once...",
+        "scoring options": f"Stage 2 of 2: Scoring options — {p['done']}/{tot} tickers · {p.get('found',0)} setups found",
+        "done":            "Scan complete ✓",
+        "idle":            "Ready",
+    }
 
-@app.route(”/api/csp/status”)
-@app.route(”/api/status”)
-def api_csp_status():
-return jsonify({
-“status”:   “ok”,
-“cached”:   bool(_csp_cache[“ts”]),
-“count”:    len(_csp_cache[“results”]),
-“running”:  _csp_cache[“running”],
-“universe”: len(UNIVERSE),
-“progress”: _csp_cache[“progress”],
-})
+    return jsonify({
+        "done":          p["done"],
+        "total":         tot,
+        "pct":           pct,
+        "phase":         p["phase"],
+        "phaseLabel":    labels.get(p["phase"], p["phase"]),
+        "currentTicker": p.get("ticker",""),
+        "found":         p.get("found",0),
+        "passed":        p.get("passed",0),
+        "downloaded":    p.get("downloaded",0),
+        "elapsed":       ela,
+        "eta":           eta,
+        "universe":      len(UNIVERSE),
+        "running":       _cache["running"],
+    })
 
-@app.route(”/api/debug”)
+
+@app.route("/api/csp/refresh", methods=["POST"])
+@app.route("/api/refresh", methods=["POST"])
+def api_refresh():
+    if _cache["running"]:
+        return jsonify({"message":"Already running","running":True}), 202
+    _cache["ts"]      = 0
+    _cache["results"] = []
+    threading.Thread(target=run_scan, daemon=True).start()
+    return jsonify({"message":"Started","universe":len(UNIVERSE)}), 200
+
+
+@app.route("/api/csp/status")
+@app.route("/api/status")
+def api_status():
+    return jsonify({
+        "status":"ok","cached":bool(_cache["ts"]),
+        "count":len(_cache["results"]),"running":_cache["running"],
+        "universe":len(UNIVERSE),"progress":_cache["progress"],
+    })
+
+
+@app.route("/api/debug")
 def api_debug():
-p = _csp_cache[“progress”]
-out = {
-“universe”:          len(UNIVERSE),
-“results”:           len(_csp_cache[“results”]),
-“running”:           _csp_cache[“running”],
-“phase”:             p[“phase”],
-“done”:              p[“done”],
-“total”:             p[“total”],
-“found”:             p.get(“found”, 0),
-“passed_prefilter”:  p.get(“passedPrefilter”, 0),
-“scoring_workers”:   SCORING_WORKERS,
-“prefilter_workers”: PREFILTER_WORKERS,
-“scoring_cap”:       SCORING_CAP,
-“cache_age_secs”:    int(time.time() - _csp_cache[“ts”]) if _csp_cache[“ts”] else None,
-}
-# Quick yfinance test
-try:
-t  = yf.Ticker(“AAPL”)
-fi = t.fast_info
-h  = t.history(period=“5d”)
-out[“yf_aapl”] = {
-“last_price”:   getattr(fi, “last_price”, “N/A”),
-“history_rows”: len(h),
-“options_count”: len(t.options) if t.options else 0,
-}
-except Exception as e:
-out[“yf_aapl”] = {“error”: str(e)}
-# Quick prefilter test
-pf = {}
-for sym in [“AAPL”, “SPY”, “TSLA”]:
-try:
-pf[sym] = fast_prefilter(sym)
-except Exception as e:
-pf[sym] = str(e)
-out[“prefilter_test”] = pf
-return jsonify(out)
+    p = _cache["progress"]
+    out = {
+        "universe":        len(UNIVERSE),
+        "results":         len(_cache["results"]),
+        "running":         _cache["running"],
+        "phase":           p["phase"],
+        "done":            p["done"],
+        "total":           p["total"],
+        "found":           p.get("found",0),
+        "passed_filter":   p.get("passed",0),
+        "scoring_workers": SCORING_WORKERS,
+        "scoring_cap":     SCORING_CAP,
+        "cache_age_secs":  int(time.time()-_cache["ts"]) if _cache["ts"] else None,
+    }
+    try:
+        t = yf.Ticker("AAPL")
+        h = t.history(period="5d")
+        out["yf_test"] = {
+            "price":   getattr(t.fast_info,"last_price","N/A"),
+            "history": len(h),
+            "options": len(t.options) if t.options else 0,
+        }
+    except Exception as e:
+        out["yf_test"] = str(e)
+    # Test bulk download on 5 tickers
+    try:
+        test = yf.download(["AAPL","MSFT","SPY","TSLA","QQQ"],
+                           period="5d", group_by="ticker",
+                           auto_adjust=True, threads=True, progress=False, timeout=15)
+        out["bulk_test"] = {
+            "shape": list(test.shape),
+            "columns_type": type(test.columns).__name__,
+        }
+    except Exception as e:
+        out["bulk_test"] = str(e)
+    return jsonify(out)
 
-# ── Portfolio endpoints ────────────────────────────────────────────────────
 
-@app.route(”/api/prices”)
+@app.route("/api/prices")
 def api_prices():
-tickers = [t.strip().upper()
-for t in request.args.get(“tickers”, “”).split(”,”) if t.strip()][:25]
-if not tickers:
-return jsonify({“error”: “No tickers provided”}), 400
-prices = {}
-for sym in tickers:
-try:
-fi = yf.Ticker(sym).fast_info
-for attr in (“last_price”, “previous_close”):
-px = getattr(fi, attr, None)
-if px and float(px) > 0:
-prices[sym] = round(float(px), 2)
-break
-except Exception:
-pass
-return jsonify({“prices”: prices, “ts”: datetime.now().strftime(”%I:%M %p”)})
+    tickers = [t.strip().upper()
+               for t in request.args.get("tickers","").split(",") if t.strip()][:25]
+    if not tickers:
+        return jsonify({"error":"No tickers"}), 400
+    prices = {}
+    for sym in tickers:
+        try:
+            fi = yf.Ticker(sym).fast_info
+            for attr in ("last_price","previous_close"):
+                px = getattr(fi,attr,None)
+                if px and float(px)>0:
+                    prices[sym]=round(float(px),2); break
+        except Exception: pass
+    return jsonify({"prices":prices,"ts":datetime.now().strftime("%I:%M %p")})
 
-@app.route(”/api/option-prices”, methods=[“POST”])
+
+@app.route("/api/option-prices", methods=["POST"])
 def api_option_prices():
-try:
-contracts = request.get_json(force=True) or []
-except Exception:
-return jsonify({“error”: “Invalid JSON”}), 400
-results = {}
-today_d = date.today()
-for c in contracts[:10]:
-cid = c.get(“id”, “”)
-ticker = (c.get(“ticker”) or “”).upper()
-opt_type = (c.get(“optionType”) or “call”).lower()
-strike = float(c.get(“strike”) or 0)
-expiration = c.get(“expiration”) or “”
-if not ticker or not strike or not expiration:
-continue
-try:
-stock = yf.Ticker(ticker)
-fi = stock.fast_info
-underlying = 0.0
-for attr in (“last_price”, “previous_close”):
-v = getattr(fi, attr, None)
-if v and float(v) > 0:
-underlying = float(v)
-break
-opts = stock.options
-if not opts:
-continue
-exp_date = datetime.strptime(expiration, “%Y-%m-%d”).date()
-best_exp = min(opts, key=lambda e: abs(
-(datetime.strptime(e, “%Y-%m-%d”).date() - exp_date).days))
-chain = stock.option_chain(best_exp)
-df = chain.calls if opt_type == “call” else chain.puts
-if df.empty:
-continue
-df = df.copy()
-df[“dist”] = (df[“strike”] - strike).abs()
-row = df.loc[df[“dist”].idxmin()]
-bid  = float(row.get(“bid”, 0) or 0)
-ask  = float(row.get(“ask”, 0) or 0)
-last = float(row.get(“lastPrice”, 0) or 0)
-iv   = float(row.get(“impliedVolatility”, 0) or 0)
-mid  = (round((bid+ask)/2, 2) if bid > 0 and ask > 0
-else round(last, 2) if last > 0 else None)
-dte = max(0, (datetime.strptime(best_exp, “%Y-%m-%d”).date() - today_d).days)
-results[cid] = {
-“mid”: mid, “bid”: round(bid,2), “ask”: round(ask,2),
-“underlying”: round(underlying,2), “dte”: dte,
-“iv”: round(iv*100,1) if iv else None,
-“expUsed”: best_exp, “strikeUsed”: float(row[“strike”]),
-}
-except Exception as e:
-log.debug(“Option price %s: %s”, ticker, e)
-return jsonify({“prices”: results, “ts”: datetime.now().strftime(”%I:%M %p”)})
+    try: contracts = request.get_json(force=True) or []
+    except Exception: return jsonify({"error":"Invalid JSON"}),400
+    results = {}
+    today_d = date.today()
+    for c in contracts[:10]:
+        cid=c.get("id",""); sym=(c.get("ticker") or "").upper()
+        ot=(c.get("optionType") or "call").lower()
+        st=float(c.get("strike") or 0); ex=c.get("expiration") or ""
+        if not sym or not st or not ex: continue
+        try:
+            tk=yf.Ticker(sym); fi=tk.fast_info; und=0.0
+            for a in ("last_price","previous_close"):
+                v=getattr(fi,a,None)
+                if v and float(v)>0: und=float(v); break
+            opts=tk.options
+            if not opts: continue
+            best=min(opts,key=lambda e:abs(
+                (datetime.strptime(e,"%Y-%m-%d").date()-datetime.strptime(ex,"%Y-%m-%d").date()).days))
+            chain=tk.option_chain(best)
+            df=chain.calls if ot=="call" else chain.puts
+            if df.empty: continue
+            df=df.copy(); df["_d"]=(df["strike"]-st).abs()
+            row=df.loc[df["_d"].idxmin()]
+            bid=float(row.get("bid",0) or 0); ask=float(row.get("ask",0) or 0)
+            last=float(row.get("lastPrice",0) or 0); iv=float(row.get("impliedVolatility",0) or 0)
+            mid=round((bid+ask)/2,2) if bid>0 and ask>0 else (round(last,2) if last>0 else None)
+            dte=max(0,(datetime.strptime(best,"%Y-%m-%d").date()-today_d).days)
+            results[cid]={"mid":mid,"bid":round(bid,2),"ask":round(ask,2),
+                          "underlying":round(und,2),"dte":dte,
+                          "iv":round(iv*100,1) if iv else None,
+                          "expUsed":best,"strikeUsed":float(row["strike"])}
+        except Exception as e: log.debug("opt-price %s: %s",sym,e)
+    return jsonify({"prices":results,"ts":datetime.now().strftime("%I:%M %p")})
 
-@app.route(”/”)
+
+@app.route("/")
 def index():
-p = _csp_cache[“progress”]
-return (f”VV CSP Scanner | Universe: {len(UNIVERSE)} | “
-f”Results: {len(_csp_cache[‘results’])} | “
-f”Running: {_csp_cache[‘running’]} | “
-f”Phase: {p[‘phase’]} ({p[‘done’]}/{p[‘total’]}) | “
-f”/api/debug”)
+    p = _cache["progress"]
+    return (f"VV Scanner | universe:{len(UNIVERSE)} | "
+            f"phase:{p['phase']} | {p['done']}/{p['total']} | "
+            f"found:{p.get('found',0)} | running:{_cache['running']} | /api/debug")
 
-if **name** == “**main**”:
-port = int(os.environ.get(“PORT”, 5000))
-app.run(host=“0.0.0.0”, port=port, debug=False, threaded=True)
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
