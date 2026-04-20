@@ -262,54 +262,106 @@
 </div><!-- /app -->
 
 <script>
-  // ─── CONFIG ───────────────────────────────────────────────────────────────
-  const API_BASE = "https://vv-scanner-production.up.railway.app";
-  // ─────────────────────────────────────────────────────────────────────────
+  var API_BASE    = "https://vv-scanner-production.up.railway.app";
+  var cspResults  = [];
+  var cspFilter   = "all";
+  var cspExpanded = {};
+  var activeTab   = "scan";
+  var pollTimer   = null;
+  var startedAt   = Date.now();
+  var timerInt    = null;
 
-  var cspResults   = [];
-  var cspFilter    = "all";
-  var cspExpanded  = {};         // {ticker: true/false}
-  var cspProgInt   = null;
-  var connInt      = null;       // connection timer interval
-  var activeTab    = "scan";
-  var scanDone     = false;
-  var lastFound    = 0;
-  var connecting   = true;       // true until first successful fetch
-  var connStart    = Date.now();
-
-  // ── Boot ──────────────────────────────────────────────────────────────────
+  // ── Boot ────────────────────────────────────────────────────────────────────
   window.addEventListener("DOMContentLoaded", function() {
-    setTab("scan");
-    startConnTimer();
-    loadCSP();
+    showTab("scan");
+    startElapsedTimer();
+    beginPoll();
   });
 
-  // Connection elapsed timer (shows seconds while waiting for server)
-  function startConnTimer() {
-    connStart = Date.now();
-    if (connInt) clearInterval(connInt);
-    connInt = setInterval(function() {
-      if (!connecting) { clearInterval(connInt); return; }
-      var s = Math.floor((Date.now() - connStart) / 1000);
+  // ── Single poll loop — replaces all previous async complexity ───────────────
+  // Every 4 seconds: fetch scan data. If results exist → show them. Simple.
+  function beginPoll() {
+    pollOnce();
+    pollTimer = setInterval(pollOnce, 4000);
+  }
+
+  function pollOnce() {
+    fetch(API_BASE + "/api/csp/scan")
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var results = data.results || [];
+
+        // Always update internal state
+        if (results.length > 0) {
+          cspResults = results;
+        }
+
+        // Update loading screen text while scanning
+        var phase = (data.progress && data.progress.phase) || "";
+        var found = (data.progress && data.progress.found) || results.length;
+        var done  = (data.progress && data.progress.done)  || 0;
+        var total = (data.progress && data.progress.total) || 0;
+
+        var titleEl = document.getElementById("load-title");
+        var subEl   = document.getElementById("load-sub");
+
+        if (data.isRefreshing || phase === "bulk download") {
+          if (titleEl) titleEl.textContent = "Stage 1: Bulk downloading all tickers...";
+          if (subEl)   subEl.textContent   = "One API call for 1,500+ tickers (~90s)";
+        } else if (phase === "scoring options" || phase === "scoring") {
+          if (titleEl) titleEl.textContent = "Stage 2: Scoring options chains...";
+          if (subEl)   subEl.textContent   = done + " / " + total + " tickers \u00b7 " + found + " setups found";
+        } else if (phase === "done" || (!data.isRefreshing && results.length > 0)) {
+          // Done — hide loading, show results
+          showResults();
+          return;
+        }
+
+        // Show results as they stream in even during scan
+        if (results.length > 0 && activeTab === "scan") {
+          renderCSP();
+          // If we have results, hide loading screen
+          showResults();
+        }
+      })
+      .catch(function() {
+        // Connection failed — update elapsed time display only
+        var elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        var titleEl = document.getElementById("load-title");
+        var subEl   = document.getElementById("load-sub");
+        if (elapsed < 45) {
+          if (titleEl) titleEl.textContent = "Connecting to server...";
+          if (subEl)   subEl.textContent   = elapsed + "s elapsed";
+        } else {
+          if (titleEl) titleEl.textContent = "Server is starting up...";
+          if (subEl)   subEl.textContent   = "Railway cold start \u2014 " + elapsed + "s elapsed";
+        }
+      });
+  }
+
+  function showResults() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (timerInt)  { clearInterval(timerInt);  timerInt  = null; }
+    document.getElementById("csp-loading").style.display    = "none";
+    document.getElementById("conn-status").style.display    = "none";
+    document.getElementById("csp-results").style.display    = "";
+    document.getElementById("csp-status-bar").style.display = "";
+    document.getElementById("csp-empty").style.display      = "none";
+    document.getElementById("refresh-btn").disabled = false;
+    renderCSP();
+  }
+
+  function startElapsedTimer() {
+    startedAt = Date.now();
+    timerInt  = setInterval(function() {
+      var s  = Math.floor((Date.now() - startedAt) / 1000);
       var el = document.getElementById("conn-timer");
       if (el) el.textContent = s + "s";
-      // Update dots animation
-      var d = document.getElementById("conn-dots");
-      if (d) {
-        var dots = ["&#9679; &nbsp; &nbsp;","&#9679; &#9679; &nbsp;","&#9679; &#9679; &#9679;"];
-        d.innerHTML = dots[Math.floor(s/1) % 3];
-      }
-    }, 500);
+    }, 1000);
   }
 
-  function stopConnTimer() {
-    connecting = false;
-    if (connInt) { clearInterval(connInt); connInt = null; }
-    document.getElementById("conn-status").style.display = "none";
-  }
-
-  // ── Tab switching ─────────────────────────────────────────────────────────
-  function setTab(t) {
+  // ── Tab switching ────────────────────────────────────────────────────────────
+  function showTab(t) {
     activeTab = t;
     document.getElementById("tab-scan").classList.toggle("active", t === "scan");
     document.getElementById("tab-playbook").classList.toggle("active", t === "playbook");
@@ -317,10 +369,8 @@
     document.getElementById("playbook").style.display      = t === "playbook" ? "" : "none";
 
     if (t === "scan") {
-      if (cspResults.length) {
-        document.getElementById("csp-loading").style.display    = "none";
-        document.getElementById("csp-results").style.display    = "";
-        document.getElementById("csp-status-bar").style.display = "";
+      if (cspResults.length > 0) {
+        showResults();
       } else {
         document.getElementById("csp-loading").style.display    = "";
         document.getElementById("csp-results").style.display    = "none";
@@ -333,294 +383,45 @@
     }
   }
 
-  // ── Fetch with manual timeout (Safari-compatible) ─────────────────────────
-  // AbortSignal.timeout() is NOT supported in Safari < 16.4 / iOS < 16.4
-  // We use AbortController + setTimeout instead.
-  function fetchWithTimeout(url, timeoutMs) {
-    var controller = new AbortController();
-    var tid = setTimeout(function() { controller.abort(); }, timeoutMs);
-    return fetch(url, { signal: controller.signal })
-      .then(function(r) { clearTimeout(tid); return r; })
-      .catch(function(e) { clearTimeout(tid); throw e; });
-  }
+  function setTab(t) { showTab(t); }  // alias used by HTML buttons
 
-  // ── Main load + retry loop ─────────────────────────────────────────────────
-  // No timeout on the initial fetch — Railway needs up to 90s to wake AND respond.
-  // We show the elapsed timer so the user sees progress.
-  async function loadCSP() {
-    showLoading();
-
-    var attempt = 0;
-    while (true) {
-      attempt++;
-      try {
-        var res  = await fetch(API_BASE + "/api/csp/scan");
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        var data = await res.json();
-
-        stopConnTimer();
-
-        // ── If we have results, show them IMMEDIATELY no matter what ──────
-        if (data.results && data.results.length > 0) {
-          cspResults = data.results;
-          document.getElementById("csp-loading").style.display    = "none";
-          document.getElementById("csp-results").style.display    = "";
-          document.getElementById("csp-status-bar").style.display = "";
-          document.getElementById("csp-empty").style.display      = "none";
-          renderCSP();
-          updateStatusBar(data);
-          scanDone = true;
-          onScanComplete();
-          // If still scanning, keep polling silently in background for fresh results
-          if (data.isRefreshing) {
-            startProgPoll();
-            pollCSP();
-          }
-          return;
-        }
-
-        // ── No results yet — scan running or just started ─────────────────
-        var stillRunning = data.isRefreshing ||
-          (data.progress && data.progress.phase !== "done" && data.progress.phase !== "idle");
-
-        if (stillRunning) {
-          document.getElementById("csp-loading").style.display = "";
-          startProgPoll();
-          pollCSP();
-          return;
-        }
-
-        // ── No results and scan not running — trigger a fresh scan ────────
-        try { await fetchWithTimeout(API_BASE + "/api/csp/refresh", 10000); } catch(e) {}
-        startProgPoll();
-        pollCSP();
-        return;
-
-      } catch (e) {
-        var elapsed = Math.floor((Date.now() - connStart) / 1000);
-        var titleEl = document.getElementById("load-title");
-        var subEl   = document.getElementById("load-sub");
-        var msgEl   = document.getElementById("conn-msg");
-        if (elapsed < 30) {
-          if (titleEl) titleEl.textContent = "Connecting to server...";
-          if (subEl)   subEl.textContent   = "Attempt " + attempt;
-        } else if (elapsed < 120) {
-          if (titleEl) titleEl.textContent = "Server is waking up...";
-          if (subEl)   subEl.textContent   = "Railway cold start — usually under 60s";
-        } else {
-          if (titleEl) titleEl.textContent = "Scan in progress...";
-          if (subEl)   subEl.textContent   = "Server busy scanning. Still trying...";
-        }
-        if (elapsed > 300) showRetryButton();
-        await sleep(attempt <= 2 ? 3000 : 6000);
-      }
-    }
-  }
-
-  function showRetryButton() {
-    var errEl = document.getElementById("csp-error");
-    errEl.style.display = "";
-    errEl.innerHTML =
-      "<div style='background:#0c1018;border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center;margin-top:8px'>" +
-        "<div style='color:var(--muted);font-size:12px;margin-bottom:12px;line-height:1.6'>" +
-          "Taking longer than expected.<br>You can reload the page or the scan may still be starting." +
-        "</div>" +
-        "<button onclick='window.location.reload()' style='background:var(--green);border:none;border-radius:8px;color:#000;font-weight:800;padding:10px 24px;font-size:13px;cursor:pointer'>&#8635; Reload Page</button>" +
-      "</div>";
-  }
-
-  // ── Result poller (once connected, checks every 6s) ───────────────────────
-  async function pollCSP() {
-    for (var i = 0; i < 120; i++) {
-      await sleep(5000);
-      try {
-        // Plain fetch — no timeout — so Safari never aborts it
-        var res  = await fetch(API_BASE + "/api/csp/scan");
-        if (!res.ok) continue;
-        var data = await res.json();
-
-        if (data.results && data.results.length > 0) {
-          cspResults = data.results;
-          updateStatusBar(data);
-          if (activeTab === "scan") {
-            document.getElementById("csp-results").style.display = "";
-            renderCSP();
-          }
-        }
-
-        var done = !data.isRefreshing &&
-          data.progress && data.progress.phase === "done";
-
-        if (done) {
-          stopProgPoll();
-          scanDone = true;
-          onScanComplete();
-          document.getElementById("csp-loading").style.display    = "none";
-          document.getElementById("csp-results").style.display    = cspResults.length ? "" : "none";
-          document.getElementById("csp-empty").style.display      = cspResults.length ? "none" : "";
-          document.getElementById("csp-status-bar").style.display = cspResults.length ? "" : "none";
-          if (activeTab === "scan" && cspResults.length) renderCSP();
-          return;
-        }
-      } catch (e) {
-        // Network error — keep polling
-      }
-    }
-    // Poll timeout — hide loading regardless, show what we have
-    stopProgPoll();
-    document.getElementById("csp-loading").style.display = "none";
-    if (cspResults.length) {
-      document.getElementById("csp-results").style.display    = "";
-      document.getElementById("csp-status-bar").style.display = "";
-      renderCSP();
-    }
-  }
-
-  // ── Progress bar poller ───────────────────────────────────────────────────
-  function startProgPoll() {
-    stopProgPoll();
-    cspProgInt = setInterval(updateProgress, 2000);
-    updateProgress();
-  }
-
-  function stopProgPoll() {
-    if (cspProgInt) { clearInterval(cspProgInt); cspProgInt = null; }
-  }
-
-  async function updateProgress() {
-    try {
-      var res = await fetch(API_BASE + "/api/csp/progress");
-      if (!res.ok) return;
-      var p = await res.json();
-
-      var titleEl  = document.getElementById("load-title");
-      var subEl    = document.getElementById("load-sub");
-      var progWrap = document.getElementById("prog-wrap");
-      var barEl    = document.getElementById("prog-bar");
-      var pctEl    = document.getElementById("prog-pct");
-      var foundEl  = document.getElementById("prog-found");
-      var tickerEl = document.getElementById("prog-ticker");
-      var statsEl  = document.getElementById("prog-stats");
-
-      if (titleEl) titleEl.textContent = p.phaseLabel || "Scanning...";
-      if (subEl)   subEl.textContent   = "";
-
-      if (p.total > 0) {
-        progWrap.style.display = "";
-        barEl.style.width = p.pct + "%";
-        pctEl.textContent = p.done.toLocaleString() + " / " + p.total.toLocaleString() + " tickers (" + p.pct + "%)";
-      }
-
-      if (p.found > 0) {
-        var isNew = p.found > lastFound;
-        lastFound = p.found;
-        foundEl.style.display = "";
-        foundEl.innerHTML = "&#10003; " + p.found + " setup" + (p.found !== 1 ? "s" : "") + " found" +
-          (isNew ? " <span class='live-badge'>NEW</span>" : "");
-      }
-
-      if (p.currentTicker && (p.phase === "scoring options" || p.phase === "pre-filter" || p.phase === "scoring")) {
-        tickerEl.style.display = "";
-        tickerEl.textContent   = "\u25c6 Scoring: " + p.currentTicker;
-      } else {
-        tickerEl.style.display = "none";
-      }
-
-      if (p.phase === "scoring options" || p.phase === "scoring" || p.phase === "pre-filter") {
-        statsEl.style.display = "";
-        var univEl = document.getElementById("pstat-univ");
-        var passEl = document.getElementById("pstat-pass");
-        var elapEl = document.getElementById("pstat-elap");
-        var etaEl  = document.getElementById("pstat-eta");
-        if (univEl) univEl.textContent = (p.universe||"—").toLocaleString() + " tickers";
-        if (passEl) passEl.textContent = p.passed > 0 ? p.passed.toLocaleString() + " tickers" : "—";
-        if (elapEl) elapEl.textContent = p.elapsed > 0 ? fmtTime(p.elapsed) : "—";
-        if (etaEl)  etaEl.textContent  = p.eta > 0 ? "~" + fmtTime(p.eta) : "calculating...";
-      }
-
-      // ── KEY FIX: if scan is done, dismiss loading screen immediately ──────
-      if (p.phase === "done" && !p.running) {
-        stopProgPoll();
-        scanDone = true;
-        onScanComplete();
-        // Fetch results one final time to make sure we have them
-        try {
-          var r2   = await fetch(API_BASE + "/api/csp/scan");
-          var dat2 = await r2.json();
-          if (dat2.results && dat2.results.length > 0) {
-            cspResults = dat2.results;
-            updateStatusBar(dat2);
-          }
-        } catch(e2) {}
-        document.getElementById("csp-loading").style.display    = "none";
-        document.getElementById("csp-results").style.display    = cspResults.length ? "" : "none";
-        document.getElementById("csp-empty").style.display      = cspResults.length ? "none" : "";
-        document.getElementById("csp-status-bar").style.display = cspResults.length ? "" : "none";
-        if (cspResults.length) renderCSP();
-      }
-
-    } catch (e) { /* silently ignore */ }
-  }
-
-  function fmtTime(s) {
-    var m = Math.floor(s/60);
-    return m > 0 ? m + "m " + (s%60) + "s" : s + "s";
-  }
-
-  // ── Refresh button ────────────────────────────────────────────────────────
-  async function doRefresh() {
-    var icon = document.getElementById("refresh-icon");
-    var label= document.getElementById("refresh-label");
+  // ── Refresh ──────────────────────────────────────────────────────────────────
+  function doRefresh() {
     var btn  = document.getElementById("refresh-btn");
-
-    // Ignore tap if already disabled / scanning
+    var icon = document.getElementById("refresh-icon");
+    var lbl  = document.getElementById("refresh-label");
     if (btn.disabled) return;
-
-    icon.classList.add("spin");
-    label.textContent = "Starting...";
     btn.disabled = true;
+    icon.innerHTML = "<span class='spin'>&#8635;</span>";
+    lbl.textContent = "Starting...";
 
-    try {
-      // 40s timeout — server may be waking up
-      var res = await fetchWithTimeout(API_BASE + "/api/csp/refresh", 40000);
-      // 200 = new scan started, 202 = already running — both are fine; anything else is an error
-      if (res.status !== 200 && res.status !== 202) throw new Error("HTTP " + res.status);
-
-      // Reset state and go into scan-watching mode
-      cspResults  = [];
-      cspExpanded = {};
-      scanDone    = false;
-      lastFound   = 0;
-      document.getElementById("csp-results").innerHTML         = "";
-      document.getElementById("csp-results").style.display     = "none";
-      document.getElementById("csp-status-bar").style.display  = "none";
-      document.getElementById("conn-status").style.display     = "none";
-      showLoading();
-      document.getElementById("conn-status").style.display = "none"; // hide "waiting for server" box
-      startProgPoll();
-      pollCSP();
-
-    } catch (e) {
-      // No alert — just log and reset the button silently.
-      // The scan may have already been running; pollCSP will catch up.
-      console.warn("Refresh request error (non-fatal):", e.message);
-      icon.classList.remove("spin");
-      label.textContent = "Refresh";
-      btn.disabled = false;
-    }
-    // Note: button stays disabled until onScanComplete() is called from pollCSP
+    fetch(API_BASE + "/api/csp/refresh", { method: "POST" })
+      .then(function() {
+        cspResults  = [];
+        cspExpanded = {};
+        // Reset to loading screen
+        document.getElementById("csp-results").innerHTML        = "";
+        document.getElementById("csp-results").style.display    = "none";
+        document.getElementById("csp-status-bar").style.display = "none";
+        document.getElementById("csp-loading").style.display    = "";
+        document.getElementById("conn-status").style.display    = "";
+        // Reset timer
+        if (timerInt) clearInterval(timerInt);
+        startElapsedTimer();
+        // Restart poll
+        if (pollTimer) clearInterval(pollTimer);
+        beginPoll();
+      })
+      .catch(function() {
+        btn.disabled = false;
+      })
+      .finally(function() {
+        icon.innerHTML  = "&#8635;";
+        lbl.textContent = "Refresh";
+      });
   }
 
-  function onScanComplete() {
-    var btn = document.getElementById("refresh-btn");
-    var icon= document.getElementById("refresh-icon");
-    var lbl = document.getElementById("refresh-label");
-    if (btn)  btn.disabled = false;
-    if (icon) icon.classList.remove("spin");
-    if (lbl)  lbl.textContent = "Refresh";
-  }
-
-  // ── Filter pills ──────────────────────────────────────────────────────────
+  // ── Filter ───────────────────────────────────────────────────────────────────
   function setCspFilter(f) {
     cspFilter = f;
     ["all","strong","decent","skip"].forEach(function(id) {
@@ -631,19 +432,12 @@
     renderCSP();
   }
 
-  // ── Render cards ──────────────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────────────────────
   function renderCSP() {
+    if (activeTab !== "scan") return;
+
     var el      = document.getElementById("csp-results");
     var emptyEl = document.getElementById("csp-empty");
-    var loadEl  = document.getElementById("csp-loading");
-
-    // If we have results, the loading screen must never be visible — period.
-    // This fires from every code path (pollCSP, updateProgress, loadCSP, setCspFilter).
-    if (cspResults.length > 0 && loadEl) {
-      loadEl.style.display = "none";
-      document.getElementById("csp-status-bar").style.display = "";
-      stopProgPoll();
-    }
 
     if (!cspResults.length) {
       el.style.display      = "none";
@@ -662,175 +456,132 @@
     el.style.display      = filtered.length ? "" : "none";
 
     var html = "";
-    for (var ci = 0; ci < filtered.length; ci++) {
-      try {
-        html += cspCardHTML(filtered[ci], ci);
-      } catch(e) {
-        // Skip bad card, don't crash the whole render
-      }
+    for (var i = 0; i < filtered.length; i++) {
+      try { html += cardHTML(filtered[i]); } catch(e) {}
     }
     el.innerHTML = html;
 
-    // Update pill counts
+    // Pills
     var s  = cspResults.filter(function(r){ return r.quality==="STRONG"; }).length;
     var d  = cspResults.filter(function(r){ return r.quality==="DECENT"; }).length;
-    var sk = cspResults.filter(function(r){ return r.quality==="SKIP"; }).length;
-    var allEl    = document.getElementById("cpill-all");
-    var strongEl = document.getElementById("cpill-strong");
-    var decentEl = document.getElementById("cpill-decent");
-    var skipEl   = document.getElementById("cpill-skip");
-    if (allEl)    allEl.textContent    = "All (" + cspResults.length + ")";
-    if (strongEl) strongEl.textContent = "\u2605 " + s + " Strong";
-    if (decentEl) decentEl.textContent = "\u25c6 " + d + " Decent";
-    if (skipEl)   skipEl.textContent   = "\u25cb " + sk + " Skip";
+    var sk = cspResults.filter(function(r){ return r.quality==="SKIP";   }).length;
+    var ae = document.getElementById("cpill-all");
+    var se = document.getElementById("cpill-strong");
+    var de = document.getElementById("cpill-decent");
+    var ke = document.getElementById("cpill-skip");
+    if (ae) ae.textContent = "All (" + cspResults.length + ")";
+    if (se) se.textContent = "\u2605 " + s + " Strong";
+    if (de) de.textContent = "\u25c6 " + d + " Decent";
+    if (ke) ke.textContent = "\u25cb " + sk + " Skip";
+
+    // Status bar
+    var sb = document.getElementById("csp-status-bar");
+    if (sb) {
+      sb.innerHTML =
+        "<strong style='color:var(--bright)'>" + s + " Strong</strong> &middot; " +
+        "<strong style='color:var(--blue)'>" + d + " Decent</strong> &middot; " +
+        cspResults.length + " total scanned<br>" +
+        "IV rank &gt; 45% &middot; ~30\u03b4 put &middot; 30\u201350 DTE &middot; no earnings in window";
+      sb.style.display = "";
+    }
   }
 
-  // ── Card HTML ─────────────────────────────────────────────────────────────
-  function cspCardHTML(r, i) {
-    var qualMap = {
+  // ── Card HTML ─────────────────────────────────────────────────────────────────
+  function cardHTML(r) {
+    var qMap = {
       STRONG: { color:"var(--green)", bg:"#001a0d", label:"\u2605 STRONG" },
       DECENT: { color:"var(--blue)",  bg:"#001020", label:"\u25c6 DECENT" },
       SKIP:   { color:"var(--red)",   bg:"#1a0208", label:"\u25cb SKIP"   },
     };
-    var q       = qualMap[r.quality] || qualMap.SKIP;
-    var isOpen  = !!cspExpanded[r.ticker];
-    var ivColor = r.ivRank >= 60 ? "var(--green)" : r.ivRank >= 45 ? "var(--yellow)" : "var(--red)";
-    var delay   = (Math.min(i, 15) * 0.04) + "s";
+    var q      = qMap[r.quality] || qMap.SKIP;
+    var isOpen = !!cspExpanded[r.ticker];
+    var ivCol  = r.ivRank >= 60 ? "var(--green)" : r.ivRank >= 45 ? "var(--yellow)" : "var(--red)";
 
-    var earnLine = r.earningsWithin
-      ? "<span style='color:var(--red);font-size:10px;font-weight:700'>\u26a0 Earnings within expiry</span>"
-      : (r.earningsDate && r.earningsDays != null
+    var earn = r.earningsWithin
+      ? "<span style='color:var(--red);font-size:10px'>\u26a0 Earnings within expiry</span>"
+      : (r.earningsDate
           ? "<span style='color:var(--yellow);font-size:10px'>Earnings: " + r.earningsDate + " (" + r.earningsDays + "d)</span>"
-          : "<span style='color:var(--dim);font-size:10px'>No earnings confirmed in window</span>");
+          : "<span style='color:var(--dim);font-size:10px'>No earnings in window</span>");
 
-    var html =
-      "<div class='csp-card " + r.quality.toLowerCase() + (isOpen ? " open" : "") +
-        "' onclick='toggleCsp(\"" + r.ticker + "\")' style='animation-delay:" + delay + "'>" +
+    var h = "<div class='csp-card " + r.quality.toLowerCase() + (isOpen ? " open" : "") + "' onclick='toggleCsp(\"" + r.ticker + "\")'>" +
       "<div class='csp-header'>" +
         "<div class='csp-top'>" +
-          "<div class='ticker-badge' style='background:" + q.bg + ";border:1px solid " + q.color + "33'>" +
+          "<div class='ticker-badge' style='background:" + q.bg + ";border:1px solid " + q.color + "44'>" +
             "<div class='ticker-sym'>" + r.ticker + "</div>" +
             "<div class='ticker-price' style='color:" + q.color + "'>$" + r.price + "</div>" +
           "</div>" +
-          "<div class='stock-info'>" +
-            "<div class='stock-name'>" + (r.name || r.ticker) + "</div>" +
-            "<div style='margin-top:3px'>" + earnLine + "</div>" +
-          "</div>" +
+          "<div class='stock-info'><div class='stock-name'>" + (r.name || r.ticker) + "</div><div style='margin-top:3px'>" + earn + "</div></div>" +
           "<div class='card-right'>" +
             "<span class='rec-badge' style='background:" + q.color + "22;color:" + q.color + ";border:1px solid " + q.color + "44'>" + q.label + "</span>" +
             "<div style='font-size:11px;color:var(--green);font-weight:700;margin-top:4px'>" + r.rocAnn + "% ann.</div>" +
           "</div>" +
         "</div>" +
         "<div class='csp-metrics'>" +
-          metricHTML("IV Rank",  r.ivRank + "%",  ivColor) +
-          metricHTML("Strike",   "$" + r.putStrike, "var(--yellow)") +
-          metricHTML("DTE",      r.dte + "d",      "var(--bright)") +
-          metricHTML("Premium",  "$" + r.premium,  "var(--green)") +
-          metricHTML("Breakeven","$" + r.breakeven,"var(--orange)") +
-          metricHTML("ROC",      r.rocPct + "%",   "var(--green)") +
+          m("IV Rank",   r.ivRank + "%",    ivCol) +
+          m("Strike",    "$" + r.putStrike,  "var(--yellow)") +
+          m("DTE",       r.dte + "d",        "var(--bright)") +
+          m("Premium",   "$" + r.premium,    "var(--green)") +
+          m("Breakeven", "$" + r.breakeven,  "var(--orange)") +
+          m("ROC",       r.rocPct + "%",     "var(--green)") +
         "</div>" +
         "<div class='iv-bar-wrap'>" +
           "<span style='font-size:9px;color:var(--muted);width:52px;flex-shrink:0'>IV Rank</span>" +
-          "<div class='iv-bar-track'><div class='iv-bar-fill' style='width:" + Math.min(100,r.ivRank) + "%;background:" + ivColor + "'></div></div>" +
-          "<span style='font-size:10px;font-weight:700;color:" + ivColor + ";width:34px;text-align:right'>" + r.ivRank + "%</span>" +
+          "<div class='iv-bar-track'><div class='iv-bar-fill' style='width:" + Math.min(100,r.ivRank) + "%;background:" + ivCol + "'></div></div>" +
+          "<span style='font-size:10px;font-weight:700;color:" + ivCol + ";width:34px;text-align:right'>" + r.ivRank + "%</span>" +
         "</div>" +
         "<div class='card-toggle'>" + (isOpen ? "\u2303 less" : "\u2304 trade details") + "</div>" +
       "</div>";
 
     if (isOpen) {
-      var coll      = r.putStrike * 100;
-      var l3Strike  = Math.round(r.putStrike * 1.03 / 5) * 5;
-      var verdictTx = r.quality === "STRONG"
-        ? "IV rank " + r.ivRank + "% with IV/RV " + r.ivRvRatio + "x. Premium is rich vs historical vol. Verify support at $" + r.putStrike + " before entering."
-        : r.quality === "DECENT"
-        ? "IV rank " + r.ivRank + "% \u2014 acceptable setup. Confirm support at strike and check spread before entering."
-        : (r.earningsWithin
-            ? "Earnings (" + r.earningsDate + ") fall within expiry. Wait for post-earnings reset."
-            : "IV rank " + r.ivRank + "% or spread " + r.spreadPct + "% outside thresholds. Skip this cycle.");
-
-      html +=
-        "<div class='csp-body'>" +
-          "<div class='verdict' style='background:" + q.color + "0f;border:1px solid " + q.color + "25'>" +
-            "<strong style='color:" + q.color + "'>" + r.quality + ": </strong>" + verdictTx +
+      var coll = r.putStrike * 100;
+      var l3   = Math.round(r.putStrike * 1.03 / 5) * 5;
+      h += "<div class='csp-body'>" +
+        "<div class='verdict' style='background:" + q.color + "0f;border:1px solid " + q.color + "25'>" +
+          "<strong style='color:" + q.color + "'>" + r.quality + ": </strong>" +
+          (r.quality === "STRONG"
+            ? "IV rank " + r.ivRank + "% with IV/RV " + r.ivRvRatio + "x. Premium rich vs realized vol. Confirm support at $" + r.putStrike + "."
+            : r.quality === "DECENT"
+            ? "IV rank " + r.ivRank + "%. Acceptable setup. Verify support at strike before entering."
+            : (r.earningsWithin ? "Earnings within expiry window. Wait for post-earnings reset." : "IV rank or spread outside thresholds. Skip this cycle.")) +
+        "</div>" +
+        "<div class='csp-grid'>" +
+          "<div class='csp-block'><div class='block-title' style='color:var(--yellow)'>\u25c6 ORDER</div>" +
+            "Action: <strong>Sell to Open 1 put</strong><br>" +
+            "Option: <strong style='color:var(--yellow)'>" + r.ticker + " $" + r.putStrike + " Put</strong><br>" +
+            "Expiry: <strong>" + r.expiration + " (" + r.dte + " DTE)</strong><br>" +
+            "Limit: <strong style='color:var(--green)'>$" + r.premium + " mid</strong><br>" +
+            "B/A: $" + r.bid + " / $" + r.ask + " \u00b7 " + r.spreadPct + "%<br>" +
+            "Cash: <strong>$" + coll.toLocaleString() + "</strong>" +
           "</div>" +
-          "<div class='csp-grid'>" +
-            "<div class='csp-block'>" +
-              "<div class='block-title' style='color:var(--yellow)'>\u25c6 ORDER</div>" +
-              "<span style='color:var(--muted)'>Action:</span> <strong style='color:var(--bright)'>Sell to Open 1 put</strong><br>" +
-              "<span style='color:var(--muted)'>Option:</span> <strong style='color:var(--yellow)'>" + r.ticker + " $" + r.putStrike + " Put</strong><br>" +
-              "<span style='color:var(--muted)'>Expiry:</span> <strong>" + r.expiration + " (" + r.dte + " DTE)</strong><br>" +
-              "<span style='color:var(--muted)'>Limit:</span> <strong style='color:var(--green)'>$" + r.premium + " (mid)</strong><br>" +
-              "<span style='color:var(--muted)'>B/A:</span> $" + r.bid + " / $" + r.ask + " \u00b7 " + r.spreadPct + "%<br>" +
-              "<span style='color:var(--muted)'>Cash:</span> <strong>$" + coll.toLocaleString() + "/contract</strong>" +
-            "</div>" +
-            "<div class='csp-block'>" +
-              "<div class='block-title' style='color:var(--green)'>\u0024 P&amp;L</div>" +
-              "<span style='color:var(--muted)'>Take profit:</span> <strong style='color:var(--green)'>$" + (r.premium * 0.5).toFixed(2) + " (+$" + r.profitTarget + ")</strong><br>" +
-              "<span style='color:var(--muted)'>Stop loss:</span> <strong style='color:var(--red)'>$" + (r.premium * 2).toFixed(2) + " (-$" + r.stopLoss + ")</strong><br>" +
-              "<span style='color:var(--muted)'>Breakeven:</span> <strong style='color:var(--orange)'>$" + r.breakeven + "</strong><br>" +
-              "<span style='color:var(--muted)'>ROC:</span> <strong style='color:var(--green)'>" + r.rocPct + "% / " + r.rocAnn + "% ann.</strong><br>" +
-              "<span style='color:var(--muted)'>IV/RV:</span> " + r.ivRvRatio + "x \u00b7 ATM " + r.atm_iv + "% \u00b7 RV " + r.rv30 + "%" +
-            "</div>" +
+          "<div class='csp-block'><div class='block-title' style='color:var(--green)'>\u0024 P&amp;L</div>" +
+            "Take profit: <strong style='color:var(--green)'>$" + (r.premium*0.5).toFixed(2) + " (+$" + r.profitTarget + ")</strong><br>" +
+            "Stop loss: <strong style='color:var(--red)'>$" + (r.premium*2).toFixed(2) + " (-$" + r.stopLoss + ")</strong><br>" +
+            "Breakeven: <strong style='color:var(--orange)'>$" + r.breakeven + "</strong><br>" +
+            "ROC: <strong style='color:var(--green)'>" + r.rocPct + "% / " + r.rocAnn + "% ann.</strong><br>" +
+            "IV/RV: " + r.ivRvRatio + "x \u00b7 " + r.atm_iv + "% / " + r.rv30 + "%" +
           "</div>" +
-          "<div class='trade-block'>" +
-            "<div class='block-title' style='color:var(--red)'>\u26a0 IF ASSIGNED \u2014 The Wheel</div>" +
-            "Own <strong>100 shares at $" + r.putStrike + "</strong> \u2014 cost basis <strong style='color:var(--orange)'>$" + r.breakeven + "</strong><br>" +
-            "Immediately sell <strong style='color:var(--purple)'>$" + l3Strike + " covered call, 30\u201345 DTE</strong><br>" +
-            "Repeat monthly. Each cycle lowers breakeven 1\u20133%.<br>" +
-            "<span style='color:var(--muted)'>Max loss: $" + r.breakeven + " \u00d7 100 = </span>" +
-            "<strong style='color:var(--red)'>$" + (r.breakeven * 100).toLocaleString() + "</strong>" +
-          "</div>" +
-          (r.earningsWithin
-            ? "<div class='verify-note' style='color:var(--red)'>\u26a0 Earnings within expiry window \u2014 skip this cycle.</div>"
-            : "") +
-          "<div class='verify-note'>Live data via Yahoo Finance \u00b7 Earnings: yfinance + Nasdaq calendar \u00b7 Always verify at your broker</div>" +
-        "</div>";
+        "</div>" +
+        "<div class='trade-block'><div class='block-title' style='color:var(--red)'>\u26a0 IF ASSIGNED</div>" +
+          "Own 100 shares at $" + r.putStrike + " \u2014 basis <strong style='color:var(--orange)'>$" + r.breakeven + "</strong><br>" +
+          "Sell <strong style='color:var(--purple)'>$" + l3 + " covered call 30\u201345 DTE</strong> immediately.<br>" +
+          "Max loss: <strong style='color:var(--red)'>$" + (r.breakeven * 100).toLocaleString() + "</strong>" +
+        "</div>" +
+        (r.earningsWithin ? "<div class='verify-note' style='color:var(--red)'>\u26a0 Skip — earnings within expiry.</div>" : "") +
+        "<div class='verify-note'>Live via Yahoo Finance \u00b7 Always verify at broker before trading</div>" +
+      "</div>";
     }
-
-    html += "</div>";
-    return html;
+    h += "</div>";
+    return h;
   }
 
-  function metricHTML(label, val, color) {
-    return "<div class='csp-metric'>" +
-      "<div class='csp-ml'>" + label + "</div>" +
-      "<div class='csp-mv' style='color:" + color + "'>" + val + "</div>" +
-    "</div>";
+  function m(label, val, color) {
+    return "<div class='csp-metric'><div class='csp-ml'>" + label + "</div><div class='csp-mv' style='color:" + color + "'>" + val + "</div></div>";
   }
 
   function toggleCsp(ticker) {
     cspExpanded[ticker] = !cspExpanded[ticker];
     renderCSP();
   }
-
-  // ── UI helpers ────────────────────────────────────────────────────────────
-  function showLoading() {
-    document.getElementById("csp-loading").style.display    = "";
-    document.getElementById("csp-results").style.display    = "none";
-    document.getElementById("csp-error").style.display      = "none";
-    document.getElementById("csp-empty").style.display      = "none";
-    document.getElementById("csp-status-bar").style.display = "none";
-    document.getElementById("playbook").style.display       = "none";
-    document.getElementById("conn-status").style.display    = "";
-  }
-
-  function updateStatusBar(data) {
-    var el = document.getElementById("csp-status-bar");
-    var s  = (data.results||[]).filter(function(r){ return r.quality==="STRONG"; }).length;
-    var d  = (data.results||[]).filter(function(r){ return r.quality==="DECENT"; }).length;
-    var scanning = data.isRefreshing
-      ? " &middot; <span style='color:var(--yellow);animation:pulse 1.5s infinite'>\u25cf Scanning...</span>"
-      : "";
-    el.innerHTML =
-      "<strong style='color:var(--bright)'>" + s + " Strong</strong> &middot; " +
-      "<strong style='color:var(--blue)'>" + d + " Decent</strong>" +
-      " &middot; Universe: <strong>" + (data.universe||0).toLocaleString() + "</strong>" + scanning + "<br>" +
-      "Last scan: " + (data.scannedAt || "\u2014") + "<br>" +
-      "IV rank &gt; 45% \u00b7 ~30\u03b4 put \u00b7 30\u201350 DTE \u00b7 no earnings in window";
-    el.style.display = "";
-  }
-
-  function sleep(ms) { return new Promise(function(r){ setTimeout(r, ms); }); }
 </script>
 
 </body>
