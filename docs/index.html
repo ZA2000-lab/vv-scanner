@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="theme-color" content="#060810"/>
-  <title>VV Scanner</title>
+  <title>VV Scanner v9</title>
   <style>
     :root {
       --bg:#060810; --card:#0c1018; --border:#161f2e; --borderhi:#1e2d44;
@@ -89,7 +89,7 @@
 .live-badge  { display:inline-block; background:var(--green); color:#000; font-size:9px; font-weight:800; border-radius:4px; padding:1px 5px; margin-left:5px; animation:blink .5s ease 4; }
 
 /* ── Cards ── */
-.csp-card        { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:10px; overflow:hidden; cursor:pointer; transition:border-color .2s; opacity:1; }
+.csp-card        { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:10px; overflow:hidden; cursor:pointer; transition:border-color .2s; opacity:1 !important; visibility:visible !important; }
 .csp-card:active { opacity:.9; transform:scale(.99); }
 .csp-card.strong { border-color:#003320; }
 .csp-card.decent { border-color:#001a33; }
@@ -262,326 +262,222 @@
 </div><!-- /app -->
 
 <script>
-  var API_BASE    = "https://vv-scanner-production.up.railway.app";
-  var cspResults  = [];
-  var cspFilter   = "all";
-  var cspExpanded = {};
-  var activeTab   = "scan";
-  var pollTimer   = null;
-  var startedAt   = Date.now();
-  var timerInt    = null;
+/* VV Scanner v9 - clean rewrite */
+var API = "https://vv-scanner-production.up.railway.app";
+var results = [], filter = "all", expanded = {}, tab = "scan", poll = null, tick = null, t0 = Date.now();
 
-  // ── Boot ────────────────────────────────────────────────────────────────────
-  window.addEventListener("DOMContentLoaded", function() {
-    showTab("scan");
-    startElapsedTimer();
-    beginPoll();
-  });
+window.addEventListener("DOMContentLoaded", function() {
+  showTab("scan");
+  tick = setInterval(function() {
+    var el = document.getElementById("conn-timer");
+    if (el) el.textContent = Math.floor((Date.now()-t0)/1000) + "s";
+  }, 1000);
+  poll = setInterval(doPoll, 5000);
+  doPoll(); // immediate first poll
+});
 
-  // ── Single poll loop — replaces all previous async complexity ───────────────
-  // Every 4 seconds: fetch scan data. If results exist → show them. Simple.
-  function beginPoll() {
-    pollOnce();
-    pollTimer = setInterval(pollOnce, 4000);
-  }
-
-  function pollOnce() {
-    fetch(API_BASE + "/api/csp/scan")
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        var results = data.results || [];
-
-        // Always update internal state
-        if (results.length > 0) {
-          cspResults = results;
-        }
-
-        // Update loading screen text while scanning
-        var phase = (data.progress && data.progress.phase) || "";
-        var found = (data.progress && data.progress.found) || results.length;
-        var done  = (data.progress && data.progress.done)  || 0;
-        var total = (data.progress && data.progress.total) || 0;
-
-        var titleEl = document.getElementById("load-title");
-        var subEl   = document.getElementById("load-sub");
-
-        if (data.isRefreshing || phase === "bulk download") {
-          if (titleEl) titleEl.textContent = "Stage 1: Bulk downloading all tickers...";
-          if (subEl)   subEl.textContent   = "One API call for 1,500+ tickers (~90s)";
-        } else if (phase === "scoring options" || phase === "scoring") {
-          if (titleEl) titleEl.textContent = "Stage 2: Scoring options chains...";
-          if (subEl)   subEl.textContent   = done + " / " + total + " tickers \u00b7 " + found + " setups found";
-        } else if (phase === "done" || (!data.isRefreshing && results.length > 0)) {
-          // Done — hide loading, show results
-          showResults();
-          return;
-        }
-
-        // Show results as they stream in even during scan
-        if (results.length > 0 && activeTab === "scan") {
-          renderCSP();
-          // If we have results, hide loading screen
-          showResults();
-        }
-      })
-      .catch(function() {
-        // Connection failed — update elapsed time display only
-        var elapsed = Math.floor((Date.now() - startedAt) / 1000);
-        var titleEl = document.getElementById("load-title");
-        var subEl   = document.getElementById("load-sub");
-        if (elapsed < 45) {
-          if (titleEl) titleEl.textContent = "Connecting to server...";
-          if (subEl)   subEl.textContent   = elapsed + "s elapsed";
-        } else {
-          if (titleEl) titleEl.textContent = "Server is starting up...";
-          if (subEl)   subEl.textContent   = "Railway cold start \u2014 " + elapsed + "s elapsed";
-        }
-      });
-  }
-
-  function showResults() {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    if (timerInt)  { clearInterval(timerInt);  timerInt  = null; }
-    document.getElementById("csp-loading").style.display    = "none";
-    document.getElementById("conn-status").style.display    = "none";
-    document.getElementById("csp-results").style.display    = "";
-    document.getElementById("csp-status-bar").style.display = "";
-    document.getElementById("csp-empty").style.display      = "none";
-    document.getElementById("refresh-btn").disabled = false;
-    renderCSP();
-  }
-
-  function startElapsedTimer() {
-    startedAt = Date.now();
-    timerInt  = setInterval(function() {
-      var s  = Math.floor((Date.now() - startedAt) / 1000);
-      var el = document.getElementById("conn-timer");
-      if (el) el.textContent = s + "s";
-    }, 1000);
-  }
-
-  // ── Tab switching ────────────────────────────────────────────────────────────
-  function showTab(t) {
-    activeTab = t;
-    document.getElementById("tab-scan").classList.toggle("active", t === "scan");
-    document.getElementById("tab-playbook").classList.toggle("active", t === "playbook");
-    document.getElementById("scan-controls").style.display = t === "scan" ? "" : "none";
-    document.getElementById("playbook").style.display      = t === "playbook" ? "" : "none";
-
-    if (t === "scan") {
-      if (cspResults.length > 0) {
-        showResults();
-      } else {
-        document.getElementById("csp-loading").style.display    = "";
-        document.getElementById("csp-results").style.display    = "none";
-        document.getElementById("csp-status-bar").style.display = "none";
+function doPoll() {
+  fetch(API + "/api/csp/scan")
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var res = d.results || [];
+      if (res.length > 0) {
+        results = res;
+        // Stop polling, hide loader, show cards
+        clearInterval(poll); poll = null;
+        clearInterval(tick); tick = null;
+        document.getElementById("csp-loading").style.display = "none";
+        document.getElementById("csp-results").style.display = "block";
+        document.getElementById("csp-status-bar").style.display = "block";
+        draw();
+        return;
       }
-    } else {
-      document.getElementById("csp-loading").style.display    = "none";
-      document.getElementById("csp-results").style.display    = "none";
+      // Still scanning — update status text
+      var ph = (d.progress && d.progress.phase) || "";
+      var done = (d.progress && d.progress.done) || 0;
+      var tot  = (d.progress && d.progress.total) || 0;
+      var found= (d.progress && d.progress.found) || 0;
+      var t = document.getElementById("load-title");
+      var s = document.getElementById("load-sub");
+      if (ph === "bulk download" || ph === "starting") {
+        if (t) t.textContent = "Stage 1: Bulk downloading tickers...";
+        if (s) s.textContent = "One call for 1,500+ tickers (~90s)";
+      } else if (ph === "scoring options" || ph === "scoring") {
+        if (t) t.textContent = "Stage 2: Scoring options chains...";
+        if (s) s.textContent = done + " / " + tot + " done \u00b7 " + found + " setups found";
+      } else {
+        if (t) t.textContent = "Connecting...";
+        if (s) s.textContent = Math.floor((Date.now()-t0)/1000) + "s elapsed";
+      }
+    })
+    .catch(function(){
+      var t = document.getElementById("load-title");
+      var s = document.getElementById("load-sub");
+      var e = Math.floor((Date.now()-t0)/1000);
+      if (t) t.textContent = e < 60 ? "Connecting to server..." : "Server waking up...";
+      if (s) s.textContent = e + "s elapsed — Railway cold start can take 60s";
+    });
+}
+
+function draw() {
+  var el = document.getElementById("csp-results");
+  if (!el) return;
+  var f = results.filter(function(r){
+    if (filter === "strong") return r.quality === "STRONG";
+    if (filter === "decent") return r.quality === "DECENT";
+    if (filter === "skip")   return r.quality === "SKIP";
+    return true;
+  });
+  // Pills
+  var s  = results.filter(function(r){ return r.quality==="STRONG"; }).length;
+  var d  = results.filter(function(r){ return r.quality==="DECENT"; }).length;
+  var sk = results.filter(function(r){ return r.quality==="SKIP"; }).length;
+  function pill(id,txt){ var e=document.getElementById(id); if(e) e.textContent=txt; }
+  pill("cpill-all", "All (" + results.length + ")");
+  pill("cpill-strong", "\u2605 " + s + " Strong");
+  pill("cpill-decent", "\u25c6 " + d + " Decent");
+  pill("cpill-skip",   "\u25cb " + sk + " Skip");
+  // Status bar
+  var sb = document.getElementById("csp-status-bar");
+  if (sb) sb.innerHTML = "<strong style='color:var(--bright)'>" + s + " Strong</strong> &middot; <strong style='color:var(--blue)'>" + d + " Decent</strong> &middot; " + results.length + " total &middot; IV rank &gt;45% &middot; 30\u201350 DTE";
+  // Cards
+  if (!f.length) { el.innerHTML = "<div style='text-align:center;padding:40px;color:var(--muted)'>No results match filter</div>"; return; }
+  var html = "";
+  for (var i=0; i<f.length; i++) { try { html += card(f[i]); } catch(e){} }
+  el.innerHTML = html;
+}
+
+function card(r) {
+  var gc = r.quality==="STRONG" ? "var(--green)" : r.quality==="DECENT" ? "var(--blue)" : "var(--red)";
+  var gb = r.quality==="STRONG" ? "#001a0d" : r.quality==="DECENT" ? "#001020" : "#1a0208";
+  var gl = r.quality==="STRONG" ? "\u2605 STRONG" : r.quality==="DECENT" ? "\u25c6 DECENT" : "\u25cb SKIP";
+  var ic = r.ivRank>=60 ? "var(--green)" : r.ivRank>=45 ? "var(--yellow)" : "var(--red)";
+  var op = expanded[r.ticker] ? 1 : 0;
+  var earn = r.earningsWithin
+    ? "<span style='color:var(--red);font-size:10px'>\u26a0 Earnings within expiry</span>"
+    : (r.earningsDate ? "<span style='color:var(--yellow);font-size:10px'>Earnings: "+r.earningsDate+" ("+r.earningsDays+"d)</span>"
+      : "<span style='color:var(--dim);font-size:10px'>No earnings in window</span>");
+
+  var h = "<div style='background:"+gb+";border:1px solid "+gc+"44;border-radius:12px;margin-bottom:10px;overflow:hidden;cursor:pointer' onclick='toggle(\""+r.ticker+"\")'>";
+  // Header
+  h += "<div style='padding:14px'>";
+  h += "<div style='display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px'>";
+  h += "<div style='background:"+gb+";border:1px solid "+gc+"55;border-radius:8px;padding:6px 10px;text-align:center;min-width:52px;flex-shrink:0'>";
+  h += "<div style='font-size:15px;font-weight:800;color:var(--bright)'>"+r.ticker+"</div>";
+  h += "<div style='font-size:11px;font-weight:700;color:"+gc+"'>$"+r.price+"</div></div>";
+  h += "<div style='flex:1;margin:0 10px;min-width:0'>";
+  h += "<div style='font-size:13px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"+(r.name||r.ticker)+"</div>";
+  h += "<div style='margin-top:3px'>"+earn+"</div></div>";
+  h += "<div style='display:flex;flex-direction:column;align-items:flex-end;gap:4px'>";
+  h += "<span style='background:"+gc+"22;color:"+gc+";border:1px solid "+gc+"44;border-radius:20px;padding:4px 10px;font-size:11px;font-weight:800'>"+gl+"</span>";
+  h += "<div style='font-size:11px;color:var(--green);font-weight:700'>"+r.rocAnn+"% ann.</div></div></div>";
+  // Metrics row
+  h += "<div style='display:flex;gap:6px;flex-wrap:wrap'>";
+  h += mt("IV Rank",r.ivRank+"%",ic)+mt("Strike","$"+r.putStrike,"var(--yellow)")+mt("DTE",r.dte+"d","var(--bright)")+mt("Premium","$"+r.premium,"var(--green)")+mt("Breakeven","$"+r.breakeven,"var(--orange)")+mt("ROC",r.rocPct+"%","var(--green)");
+  h += "</div>";
+  // IV bar
+  h += "<div style='display:flex;align-items:center;gap:8px;margin-top:8px'>";
+  h += "<span style='font-size:9px;color:var(--muted);width:52px'>IV Rank</span>";
+  h += "<div style='flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden'><div style='height:100%;width:"+Math.min(100,r.ivRank)+"%;background:"+ic+";border-radius:3px'></div></div>";
+  h += "<span style='font-size:10px;font-weight:700;color:"+ic+";width:34px;text-align:right'>"+r.ivRank+"%</span></div>";
+  h += "<div style='text-align:right;font-size:11px;color:var(--dim);margin-top:8px'>"+(op?"\u2303 less":"\u2304 trade details")+"</div>";
+  h += "</div>"; // end header padding
+
+  if (op) {
+    var coll = r.putStrike*100;
+    var l3   = Math.round(r.putStrike*1.03/5)*5;
+    var vt   = r.quality==="STRONG" ? "IV rank "+r.ivRank+"% / IV·RV "+r.ivRvRatio+"x. Premium rich vs realized vol. Confirm support at $"+r.putStrike+"."
+             : r.quality==="DECENT" ? "IV rank "+r.ivRank+"%. Acceptable. Verify support at $"+r.putStrike+" before entering."
+             : (r.earningsWithin ? "Earnings within expiry. Skip and re-enter after earnings." : "Below threshold. Skip this cycle.");
+    h += "<div style='border-top:1px solid var(--borderhi);padding:14px'>";
+    h += "<div style='background:"+gc+"0f;border:1px solid "+gc+"25;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:var(--text);line-height:1.6'>";
+    h += "<strong style='color:"+gc+"'>"+r.quality+": </strong>"+vt+"</div>";
+    h += "<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px'>";
+    h += "<div style='background:#07090e;border:1px solid var(--border);border-radius:8px;padding:11px;font-size:12px;line-height:1.9;color:var(--text)'>";
+    h += "<div style='font-size:10px;font-weight:800;letter-spacing:.1em;color:var(--yellow);margin-bottom:8px'>ORDER</div>";
+    h += "<span style='color:var(--muted)'>Sell:</span> <strong style='color:var(--yellow)'>"+r.ticker+" $"+r.putStrike+" Put</strong><br>";
+    h += "<span style='color:var(--muted)'>Expiry:</span> <strong>"+r.expiration+" ("+r.dte+"d)</strong><br>";
+    h += "<span style='color:var(--muted)'>Limit:</span> <strong style='color:var(--green)'>$"+r.premium+" mid</strong><br>";
+    h += "<span style='color:var(--muted)'>B/A:</span> $"+r.bid+" / $"+r.ask+" ("+r.spreadPct+"%)<br>";
+    h += "<span style='color:var(--muted)'>Cash:</span> <strong>$"+coll.toLocaleString()+"</strong></div>";
+    h += "<div style='background:#07090e;border:1px solid var(--border);border-radius:8px;padding:11px;font-size:12px;line-height:1.9;color:var(--text)'>";
+    h += "<div style='font-size:10px;font-weight:800;letter-spacing:.1em;color:var(--green);margin-bottom:8px'>P&amp;L</div>";
+    h += "<span style='color:var(--muted)'>Target:</span> <strong style='color:var(--green)'>$"+(r.premium*0.5).toFixed(2)+" (+$"+r.profitTarget+")</strong><br>";
+    h += "<span style='color:var(--muted)'>Stop:</span> <strong style='color:var(--red)'>$"+(r.premium*2).toFixed(2)+" (-$"+r.stopLoss+")</strong><br>";
+    h += "<span style='color:var(--muted)'>Breakeven:</span> <strong style='color:var(--orange)'>$"+r.breakeven+"</strong><br>";
+    h += "<span style='color:var(--muted)'>ROC:</span> <strong style='color:var(--green)'>"+r.rocPct+"% / "+r.rocAnn+"% ann</strong><br>";
+    h += "<span style='color:var(--muted)'>IV/RV:</span> "+r.ivRvRatio+"x</div></div>";
+    h += "<div style='background:#07090e;border:1px solid var(--border);border-radius:8px;padding:11px;font-size:12px;color:var(--text);line-height:1.9'>";
+    h += "<div style='font-size:10px;font-weight:800;letter-spacing:.1em;color:var(--red);margin-bottom:6px'>\u26a0 IF ASSIGNED</div>";
+    h += "Own 100 shares at $"+r.putStrike+" \u2014 basis <strong style='color:var(--orange)'>$"+r.breakeven+"</strong><br>";
+    h += "Sell <strong style='color:var(--purple)'>$"+l3+" covered call 30\u201345 DTE</strong> immediately.<br>";
+    h += "Max loss: <strong style='color:var(--red)'>$"+(r.breakeven*100).toLocaleString()+"</strong></div>";
+    h += "<div style='text-align:center;font-size:10px;color:var(--dim);margin-top:10px'>Live data via Yahoo Finance \u00b7 Always verify at your broker</div>";
+    h += "</div>"; // end body
+  }
+  h += "</div>"; // end card
+  return h;
+}
+
+function mt(label, val, color) {
+  return "<div style='background:#ffffff08;border:1px solid var(--border);border-radius:6px;padding:5px 9px;text-align:center'>"
+    + "<div style='font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px'>"+label+"</div>"
+    + "<div style='font-size:12px;font-weight:700;color:"+color+"'>"+val+"</div></div>";
+}
+
+function toggle(ticker) { expanded[ticker] = !expanded[ticker]; draw(); }
+
+function setTab(t) { showTab(t); }
+function showTab(t) {
+  tab = t;
+  document.getElementById("tab-scan").classList.toggle("active", t==="scan");
+  document.getElementById("tab-playbook").classList.toggle("active", t==="playbook");
+  document.getElementById("scan-controls").style.display = t==="scan" ? "" : "none";
+  document.getElementById("playbook").style.display      = t==="playbook" ? "" : "none";
+  if (t === "scan") {
+    if (results.length > 0) {
+      document.getElementById("csp-loading").style.display = "none";
+      document.getElementById("csp-results").style.display = "block";
+      document.getElementById("csp-status-bar").style.display = "block";
+      draw();
+    }
+  } else {
+    document.getElementById("csp-loading").style.display = "none";
+    document.getElementById("csp-results").style.display = "none";
+    document.getElementById("csp-status-bar").style.display = "none";
+  }
+}
+
+function setCspFilter(f) {
+  filter = f;
+  ["all","strong","decent","skip"].forEach(function(id){
+    var el = document.getElementById("cpill-"+id);
+    if (el) el.className = "fpill" + (f===id ? " active-"+id : "");
+  });
+  draw();
+}
+
+function doRefresh() {
+  var btn = document.getElementById("refresh-btn");
+  if (btn.disabled) return;
+  btn.disabled = true;
+  fetch(API + "/api/csp/refresh", {method:"POST"})
+    .then(function(){
+      results = []; expanded = {}; t0 = Date.now();
+      document.getElementById("csp-results").innerHTML = "";
+      document.getElementById("csp-results").style.display = "none";
       document.getElementById("csp-status-bar").style.display = "none";
-    }
-  }
-
-  function setTab(t) { showTab(t); }  // alias used by HTML buttons
-
-  // ── Refresh ──────────────────────────────────────────────────────────────────
-  function doRefresh() {
-    var btn  = document.getElementById("refresh-btn");
-    var icon = document.getElementById("refresh-icon");
-    var lbl  = document.getElementById("refresh-label");
-    if (btn.disabled) return;
-    btn.disabled = true;
-    icon.innerHTML = "<span class='spin'>&#8635;</span>";
-    lbl.textContent = "Starting...";
-
-    fetch(API_BASE + "/api/csp/refresh", { method: "POST" })
-      .then(function() {
-        cspResults  = [];
-        cspExpanded = {};
-        // Reset to loading screen
-        document.getElementById("csp-results").innerHTML        = "";
-        document.getElementById("csp-results").style.display    = "none";
-        document.getElementById("csp-status-bar").style.display = "none";
-        document.getElementById("csp-loading").style.display    = "";
-        document.getElementById("conn-status").style.display    = "";
-        // Reset timer
-        if (timerInt) clearInterval(timerInt);
-        startElapsedTimer();
-        // Restart poll
-        if (pollTimer) clearInterval(pollTimer);
-        beginPoll();
-      })
-      .catch(function() {
-        btn.disabled = false;
-      })
-      .finally(function() {
-        icon.innerHTML  = "&#8635;";
-        lbl.textContent = "Refresh";
-      });
-  }
-
-  // ── Filter ───────────────────────────────────────────────────────────────────
-  function setCspFilter(f) {
-    cspFilter = f;
-    ["all","strong","decent","skip"].forEach(function(id) {
-      var el = document.getElementById("cpill-" + id);
-      if (!el) return;
-      el.className = "fpill" + (f === id ? " active-" + id : "");
-    });
-    renderCSP();
-  }
-
-  // ── Render ───────────────────────────────────────────────────────────────────
-  function renderCSP() {
-    if (activeTab !== "scan") return;
-
-    var el      = document.getElementById("csp-results");
-    var emptyEl = document.getElementById("csp-empty");
-
-    if (!cspResults.length) {
-      el.style.display      = "none";
-      emptyEl.style.display = "";
-      return;
-    }
-
-    var filtered = cspResults.filter(function(r) {
-      if (cspFilter === "strong") return r.quality === "STRONG";
-      if (cspFilter === "decent") return r.quality === "DECENT";
-      if (cspFilter === "skip")   return r.quality === "SKIP";
-      return true;
-    });
-
-    emptyEl.style.display = filtered.length ? "none" : "";
-    el.style.display      = filtered.length ? "" : "none";
-
-    var html = "";
-    for (var i = 0; i < filtered.length; i++) {
-      try { html += cardHTML(filtered[i]); } catch(e) {}
-    }
-    el.innerHTML = html;
-
-    // Pills
-    var s  = cspResults.filter(function(r){ return r.quality==="STRONG"; }).length;
-    var d  = cspResults.filter(function(r){ return r.quality==="DECENT"; }).length;
-    var sk = cspResults.filter(function(r){ return r.quality==="SKIP";   }).length;
-    var ae = document.getElementById("cpill-all");
-    var se = document.getElementById("cpill-strong");
-    var de = document.getElementById("cpill-decent");
-    var ke = document.getElementById("cpill-skip");
-    if (ae) ae.textContent = "All (" + cspResults.length + ")";
-    if (se) se.textContent = "\u2605 " + s + " Strong";
-    if (de) de.textContent = "\u25c6 " + d + " Decent";
-    if (ke) ke.textContent = "\u25cb " + sk + " Skip";
-
-    // Status bar
-    var sb = document.getElementById("csp-status-bar");
-    if (sb) {
-      sb.innerHTML =
-        "<strong style='color:var(--bright)'>" + s + " Strong</strong> &middot; " +
-        "<strong style='color:var(--blue)'>" + d + " Decent</strong> &middot; " +
-        cspResults.length + " total scanned<br>" +
-        "IV rank &gt; 45% &middot; ~30\u03b4 put &middot; 30\u201350 DTE &middot; no earnings in window";
-      sb.style.display = "";
-    }
-  }
-
-  // ── Card HTML ─────────────────────────────────────────────────────────────────
-  function cardHTML(r) {
-    var qMap = {
-      STRONG: { color:"var(--green)", bg:"#001a0d", label:"\u2605 STRONG" },
-      DECENT: { color:"var(--blue)",  bg:"#001020", label:"\u25c6 DECENT" },
-      SKIP:   { color:"var(--red)",   bg:"#1a0208", label:"\u25cb SKIP"   },
-    };
-    var q      = qMap[r.quality] || qMap.SKIP;
-    var isOpen = !!cspExpanded[r.ticker];
-    var ivCol  = r.ivRank >= 60 ? "var(--green)" : r.ivRank >= 45 ? "var(--yellow)" : "var(--red)";
-
-    var earn = r.earningsWithin
-      ? "<span style='color:var(--red);font-size:10px'>\u26a0 Earnings within expiry</span>"
-      : (r.earningsDate
-          ? "<span style='color:var(--yellow);font-size:10px'>Earnings: " + r.earningsDate + " (" + r.earningsDays + "d)</span>"
-          : "<span style='color:var(--dim);font-size:10px'>No earnings in window</span>");
-
-    var h = "<div class='csp-card " + r.quality.toLowerCase() + (isOpen ? " open" : "") + "' onclick='toggleCsp(\"" + r.ticker + "\")'>" +
-      "<div class='csp-header'>" +
-        "<div class='csp-top'>" +
-          "<div class='ticker-badge' style='background:" + q.bg + ";border:1px solid " + q.color + "44'>" +
-            "<div class='ticker-sym'>" + r.ticker + "</div>" +
-            "<div class='ticker-price' style='color:" + q.color + "'>$" + r.price + "</div>" +
-          "</div>" +
-          "<div class='stock-info'><div class='stock-name'>" + (r.name || r.ticker) + "</div><div style='margin-top:3px'>" + earn + "</div></div>" +
-          "<div class='card-right'>" +
-            "<span class='rec-badge' style='background:" + q.color + "22;color:" + q.color + ";border:1px solid " + q.color + "44'>" + q.label + "</span>" +
-            "<div style='font-size:11px;color:var(--green);font-weight:700;margin-top:4px'>" + r.rocAnn + "% ann.</div>" +
-          "</div>" +
-        "</div>" +
-        "<div class='csp-metrics'>" +
-          m("IV Rank",   r.ivRank + "%",    ivCol) +
-          m("Strike",    "$" + r.putStrike,  "var(--yellow)") +
-          m("DTE",       r.dte + "d",        "var(--bright)") +
-          m("Premium",   "$" + r.premium,    "var(--green)") +
-          m("Breakeven", "$" + r.breakeven,  "var(--orange)") +
-          m("ROC",       r.rocPct + "%",     "var(--green)") +
-        "</div>" +
-        "<div class='iv-bar-wrap'>" +
-          "<span style='font-size:9px;color:var(--muted);width:52px;flex-shrink:0'>IV Rank</span>" +
-          "<div class='iv-bar-track'><div class='iv-bar-fill' style='width:" + Math.min(100,r.ivRank) + "%;background:" + ivCol + "'></div></div>" +
-          "<span style='font-size:10px;font-weight:700;color:" + ivCol + ";width:34px;text-align:right'>" + r.ivRank + "%</span>" +
-        "</div>" +
-        "<div class='card-toggle'>" + (isOpen ? "\u2303 less" : "\u2304 trade details") + "</div>" +
-      "</div>";
-
-    if (isOpen) {
-      var coll = r.putStrike * 100;
-      var l3   = Math.round(r.putStrike * 1.03 / 5) * 5;
-      h += "<div class='csp-body'>" +
-        "<div class='verdict' style='background:" + q.color + "0f;border:1px solid " + q.color + "25'>" +
-          "<strong style='color:" + q.color + "'>" + r.quality + ": </strong>" +
-          (r.quality === "STRONG"
-            ? "IV rank " + r.ivRank + "% with IV/RV " + r.ivRvRatio + "x. Premium rich vs realized vol. Confirm support at $" + r.putStrike + "."
-            : r.quality === "DECENT"
-            ? "IV rank " + r.ivRank + "%. Acceptable setup. Verify support at strike before entering."
-            : (r.earningsWithin ? "Earnings within expiry window. Wait for post-earnings reset." : "IV rank or spread outside thresholds. Skip this cycle.")) +
-        "</div>" +
-        "<div class='csp-grid'>" +
-          "<div class='csp-block'><div class='block-title' style='color:var(--yellow)'>\u25c6 ORDER</div>" +
-            "Action: <strong>Sell to Open 1 put</strong><br>" +
-            "Option: <strong style='color:var(--yellow)'>" + r.ticker + " $" + r.putStrike + " Put</strong><br>" +
-            "Expiry: <strong>" + r.expiration + " (" + r.dte + " DTE)</strong><br>" +
-            "Limit: <strong style='color:var(--green)'>$" + r.premium + " mid</strong><br>" +
-            "B/A: $" + r.bid + " / $" + r.ask + " \u00b7 " + r.spreadPct + "%<br>" +
-            "Cash: <strong>$" + coll.toLocaleString() + "</strong>" +
-          "</div>" +
-          "<div class='csp-block'><div class='block-title' style='color:var(--green)'>\u0024 P&amp;L</div>" +
-            "Take profit: <strong style='color:var(--green)'>$" + (r.premium*0.5).toFixed(2) + " (+$" + r.profitTarget + ")</strong><br>" +
-            "Stop loss: <strong style='color:var(--red)'>$" + (r.premium*2).toFixed(2) + " (-$" + r.stopLoss + ")</strong><br>" +
-            "Breakeven: <strong style='color:var(--orange)'>$" + r.breakeven + "</strong><br>" +
-            "ROC: <strong style='color:var(--green)'>" + r.rocPct + "% / " + r.rocAnn + "% ann.</strong><br>" +
-            "IV/RV: " + r.ivRvRatio + "x \u00b7 " + r.atm_iv + "% / " + r.rv30 + "%" +
-          "</div>" +
-        "</div>" +
-        "<div class='trade-block'><div class='block-title' style='color:var(--red)'>\u26a0 IF ASSIGNED</div>" +
-          "Own 100 shares at $" + r.putStrike + " \u2014 basis <strong style='color:var(--orange)'>$" + r.breakeven + "</strong><br>" +
-          "Sell <strong style='color:var(--purple)'>$" + l3 + " covered call 30\u201345 DTE</strong> immediately.<br>" +
-          "Max loss: <strong style='color:var(--red)'>$" + (r.breakeven * 100).toLocaleString() + "</strong>" +
-        "</div>" +
-        (r.earningsWithin ? "<div class='verify-note' style='color:var(--red)'>\u26a0 Skip — earnings within expiry.</div>" : "") +
-        "<div class='verify-note'>Live via Yahoo Finance \u00b7 Always verify at broker before trading</div>" +
-      "</div>";
-    }
-    h += "</div>";
-    return h;
-  }
-
-  function m(label, val, color) {
-    return "<div class='csp-metric'><div class='csp-ml'>" + label + "</div><div class='csp-mv' style='color:" + color + "'>" + val + "</div></div>";
-  }
-
-  function toggleCsp(ticker) {
-    cspExpanded[ticker] = !cspExpanded[ticker];
-    renderCSP();
-  }
+      document.getElementById("csp-loading").style.display = "";
+      document.getElementById("conn-status").style.display = "";
+      clearInterval(poll); poll = setInterval(doPoll, 5000);
+      clearInterval(tick); tick = setInterval(function(){
+        var el=document.getElementById("conn-timer"); if(el) el.textContent=Math.floor((Date.now()-t0)/1000)+"s";
+      },1000);
+      doPoll();
+    })
+    .catch(function(){})
+    .finally(function(){ btn.disabled=false; });
+}
 </script>
 
 </body>
