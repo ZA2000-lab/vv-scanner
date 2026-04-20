@@ -89,7 +89,7 @@
 .live-badge  { display:inline-block; background:var(--green); color:#000; font-size:9px; font-weight:800; border-radius:4px; padding:1px 5px; margin-left:5px; animation:blink .5s ease 4; }
 
 /* ── Cards ── */
-.csp-card        { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:10px; overflow:hidden; animation:fadeUp .4s ease both; cursor:pointer; transition:border-color .2s; }
+.csp-card        { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:10px; overflow:hidden; cursor:pointer; transition:border-color .2s; opacity:1; }
 .csp-card:active { opacity:.9; transform:scale(.99); }
 .csp-card.strong { border-color:#003320; }
 .csp-card.decent { border-color:#001a33; }
@@ -660,7 +660,16 @@
 
     emptyEl.style.display = filtered.length ? "none" : "";
     el.style.display      = filtered.length ? "" : "none";
-    el.innerHTML          = filtered.map(function(r, i) { return cspCardHTML(r, i); }).join("");
+
+    var html = "";
+    for (var ci = 0; ci < filtered.length; ci++) {
+      try {
+        html += cspCardHTML(filtered[ci], ci);
+      } catch(e) {
+        // Skip bad card, don't crash the whole render
+      }
+    }
+    el.innerHTML = html;
 
     // Update pill counts
     var s  = cspResults.filter(function(r){ return r.quality==="STRONG"; }).length;
