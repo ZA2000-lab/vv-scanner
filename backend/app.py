@@ -386,78 +386,61 @@ def _cal():
 threading.Thread(target=_cal, daemon=True).start()
 
 # ─────────────────────────────────────────────────────────────────────
-# STAGE 1: yf.download() — bulk price + volume for all tickers at once
-# This is the key insight: one API call instead of 1500 individual calls.
-# yfinance batches internally and Yahoo returns efficiently.
-# ─────────────────────────────────────────────────────────────────────
-log.info("Stage 1: bulk downloading %d tickers...", len(universe))
+# ── STAGE 1: Batched bulk download ────────────────────────────────────
+# Download in batches of 100 to keep RAM under Railway's 512MB limit.
+# Each batch: ~100 tickers × 126 days × 6 cols = ~6MB. Process then discard.
+BATCH_SIZE = 100
+batches    = [universe[i:i+BATCH_SIZE] for i in range(0, len(universe), BATCH_SIZE)]
+candidates = []  # (sym, price, vol, rv30, rv_lo, rv_hi)
 
-try:
-    raw = yf.download(
-        tickers       = universe,
-        period        = "6mo",
-        interval      = "1d",
-        group_by      = "ticker",
-        auto_adjust   = True,
-        threads       = True,
-        progress      = False,
-        timeout       = 120,
-    )
-except Exception as e:
-    log.error("Bulk download failed: %s", e)
-    _cache["running"] = False
-    _cache["progress"]["phase"] = "done"
-    return
+log.info("Stage 1: %d batches of up to %d tickers", len(batches), BATCH_SIZE)
 
-elapsed_dl = time.time() - t0
-log.info("Bulk download complete in %.1fs", elapsed_dl)
-
-# ── Parse bulk data and filter ────────────────────────────────────────
-candidates = []  # list of (sym, price, vol, rv30, rv_lo, rv_hi)
-
-# Handle both single-ticker (flat) and multi-ticker (MultiIndex) returns
-is_multi = isinstance(raw.columns, pd.MultiIndex)
-
-for sym in universe:
+for bi, batch in enumerate(batches):
+    _cache["progress"]["phase"] = f"bulk download {bi+1}/{len(batches)}"
     try:
-        if is_multi:
-            if sym not in raw.columns.get_level_values(0):
-                continue
-            h = raw[sym].dropna(how="all")
-        else:
-            # Single ticker returned as flat DataFrame
-            h = raw.dropna(how="all")
-
-        if len(h) < 20:
-            continue
-
-        price = float(h["Close"].iloc[-1])
-        if price < 2 or np.isnan(price):
-            continue
-
-        avg_vol = float(h["Volume"].tail(20).mean())
-        if avg_vol < 300_000 or np.isnan(avg_vol):
-            continue
-
-        # RV from close prices
-        close = h["Close"].dropna()
-        rets  = close.pct_change().dropna()
-        if len(rets) < 10:
-            continue
-        rv30 = float(rets.tail(20).std() * np.sqrt(252))
-
-        # Use full min/max of rolling RV for IV rank range (not percentile clipping)
-        # This gives a proper 0-100 rank: where does current IV sit in the past 6mo range?
-        rv_series = rets.rolling(20).std().dropna() * np.sqrt(252)
-        rv_lo = float(rv_series.min()) if len(rv_series) > 5 else rv30 * 0.5
-        rv_hi = float(rv_series.max()) if len(rv_series) > 5 else rv30 * 1.5
-
-        candidates.append((sym, price, avg_vol, rv30, rv_lo, rv_hi))
-
-    except Exception:
+        raw = yf.download(
+            tickers     = batch,
+            period      = "6mo",
+            interval    = "1d",
+            group_by    = "ticker",
+            auto_adjust = True,
+            threads     = True,
+            progress    = False,
+            timeout     = 60,
+        )
+    except Exception as e:
+        log.warning("Batch %d failed: %s", bi+1, e)
         continue
 
-log.info("Stage 1 filter: %d / %d tickers passed", len(candidates), len(universe))
+    is_multi = isinstance(raw.columns, pd.MultiIndex)
+
+    for sym in batch:
+        try:
+            h = raw[sym].dropna(how="all") if is_multi and sym in raw.columns.get_level_values(0) \
+                else (raw.dropna(how="all") if not is_multi else None)
+            if h is None or len(h) < 20:
+                continue
+            price = float(h["Close"].iloc[-1])
+            if price < 2 or np.isnan(price):
+                continue
+            avg_vol = float(h["Volume"].tail(20).mean())
+            if avg_vol < 300_000 or np.isnan(avg_vol):
+                continue
+            rets     = h["Close"].dropna().pct_change().dropna()
+            if len(rets) < 15:
+                continue
+            rv30     = float(rets.tail(20).std() * np.sqrt(252))
+            rv_roll  = rets.rolling(20).std().dropna() * np.sqrt(252)
+            rv_lo    = float(rv_roll.min()) if len(rv_roll) > 5 else rv30 * 0.5
+            rv_hi    = float(rv_roll.max()) if len(rv_roll) > 5 else rv30 * 1.5
+            candidates.append((sym, price, avg_vol, rv30, rv_lo, rv_hi))
+        except Exception:
+            continue
+
+    del raw  # free memory immediately after each batch
+    log.info("Batch %d/%d done — %d candidates so far", bi+1, len(batches), len(candidates))
+
+log.info("Stage 1 complete: %d / %d tickers passed", len(candidates), len(universe))
 _cache["progress"]["downloaded"] = len(universe)
 _cache["progress"]["passed"]     = len(candidates)
 
