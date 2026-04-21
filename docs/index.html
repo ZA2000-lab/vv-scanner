@@ -280,34 +280,46 @@ function doPoll() {
   fetch(API + "/api/csp/scan")
     .then(function(r){ return r.json(); })
     .then(function(d){
-      var res = d.results || [];
-      if (res.length > 0) {
+      var res    = d.results || [];
+      var ph     = (d.progress && d.progress.phase) || "";
+      var isDone = !d.isRefreshing && ph === "done";
+      var found  = (d.progress && d.progress.found) || 0;
+      var done   = (d.progress && d.progress.done)  || 0;
+      var tot    = (d.progress && d.progress.total) || 0;
+
+      // Show results as they stream in (keep polling even with partial results)
+      if (res.length > results.length) {
         results = res;
-        // Stop polling, hide loader, show cards
-        clearInterval(poll); poll = null;
-        clearInterval(tick); tick = null;
         document.getElementById("csp-loading").style.display = "none";
         document.getElementById("csp-results").style.display = "block";
         document.getElementById("csp-status-bar").style.display = "block";
         draw();
-        return;
       }
-      // Still scanning — update status text
-      var ph = (d.progress && d.progress.phase) || "";
-      var done = (d.progress && d.progress.done) || 0;
-      var tot  = (d.progress && d.progress.total) || 0;
-      var found= (d.progress && d.progress.found) || 0;
-      var t = document.getElementById("load-title");
-      var s = document.getElementById("load-sub");
-      if (ph === "bulk download" || ph === "starting") {
-        if (t) t.textContent = "Stage 1: Bulk downloading tickers...";
-        if (s) s.textContent = "One call for 1,500+ tickers (~90s)";
-      } else if (ph === "scoring options" || ph === "scoring") {
-        if (t) t.textContent = "Stage 2: Scoring options chains...";
-        if (s) s.textContent = done + " / " + tot + " done \u00b7 " + found + " setups found";
+
+      // Update status text while still scanning
+      if (!isDone) {
+        var t = document.getElementById("load-title");
+        var s = document.getElementById("load-sub");
+        if (ph === "bulk download" || ph === "starting") {
+          if (t) t.textContent = "Stage 1: Bulk downloading tickers...";
+          if (s) s.textContent = "One call for 1,500+ tickers (~90s)";
+        } else if (ph === "scoring options" || ph === "scoring") {
+          if (t) t.textContent = "Stage 2: Scoring options chains...";
+          if (s) s.textContent = done + " / " + tot + " done \u00b7 " + found + " setups found";
+        }
+        return; // keep polling
+      }
+
+      // Scan is done — stop polling
+      clearInterval(poll); poll = null;
+      clearInterval(tick); tick = null;
+      document.getElementById("csp-loading").style.display = "none";
+      if (results.length > 0) {
+        document.getElementById("csp-results").style.display = "block";
+        document.getElementById("csp-status-bar").style.display = "block";
+        draw();
       } else {
-        if (t) t.textContent = "Connecting...";
-        if (s) s.textContent = Math.floor((Date.now()-t0)/1000) + "s elapsed";
+        document.getElementById("csp-empty").style.display = "block";
       }
     })
     .catch(function(){
@@ -315,7 +327,7 @@ function doPoll() {
       var s = document.getElementById("load-sub");
       var e = Math.floor((Date.now()-t0)/1000);
       if (t) t.textContent = e < 60 ? "Connecting to server..." : "Server waking up...";
-      if (s) s.textContent = e + "s elapsed — Railway cold start can take 60s";
+      if (s) s.textContent = e + "s elapsed \u2014 Railway cold start can take 60s";
     });
 }
 
