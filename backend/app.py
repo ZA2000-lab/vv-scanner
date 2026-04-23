@@ -1,23 +1,5 @@
-## “””
-VV CSP Scanner
+# VV CSP Scanner - batched bulk download approach
 
-Real 1500-ticker solution using yf.download() bulk API.
-
-Stage 1: yf.download(all ~1500 tickers, period=“3mo”)
-→ One bulk API call. Returns price + volume for every ticker.
-→ Filter by price > $2, avg vol > 300k → typically ~500-700 pass.
-→ Compute RV from the downloaded close prices (no extra calls).
-→ Sort by volume, take top SCORING_CAP.
-→ Time: ~60-120s for 1500 tickers.
-
-Stage 2: Options chains on the filtered list only.
-→ 4 workers (safe for Railway, avoids Yahoo rate limits).
-→ Each ticker: 2 calls (options list + option_chain).
-→ Time: 300 tickers / 4 workers × ~2.5s each ≈ ~190s.
-
-Total: ~4-5 minutes for 1500 tickers.
-Server: gunicorn –workers 1 –threads 8 (scan uses 4, HTTP uses 4).
-“””
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import yfinance as yf
@@ -53,7 +35,7 @@ NASDAQ_HEADERS = {
 “Referer”: “https://www.nasdaq.com/market-activity/earnings”,
 }
 
-# ── Cache ──────────────────────────────────────────────────────────────────
+# – Cache ——————————————————————
 
 _cache = {
 “results”:  [],
@@ -66,9 +48,9 @@ _cache = {
 },
 }
 
-# ── Universe ───────────────────────────────────────────────────────────────
+# – Universe —————————————————————
 
-# Hardcoded liquid names — Wikipedia adds S&P 500/400/600 at startup.
+# Hardcoded liquid names – Wikipedia adds S&P 500/400/600 at startup.
 
 _EXTRAS = [
 “CDE”,
@@ -160,7 +142,7 @@ log.info("Universe ready: %d tickers", len(result))
 
 threading.Thread(target=_build_universe, daemon=True).start()
 
-# ── Earnings calendar ──────────────────────────────────────────────────────
+# – Earnings calendar ——————————————————
 
 def fetch_earnings_map():
 out = {}
@@ -227,11 +209,11 @@ return None, None
 cands.sort()
 return cands[0][1], cands[0][0]
 
-# ── Options scoring (Stage 2) ──────────────────────────────────────────────
+# – Options scoring (Stage 2) –––––––––––––––––––––––
 
 def score_options(sym, price, rv30, rv_lo, rv_hi, avg_vol, emap):
 “””
-Only fetches options data — price/vol/rv already computed from bulk download.
+Only fetches options data – price/vol/rv already computed from bulk download.
 Makes 2 API calls: stock.options + stock.option_chain(exp).
 “””
 try:
@@ -352,7 +334,7 @@ def _sort(lst):
 return sorted(lst,
 key=lambda x: ({“STRONG”:0,“DECENT”:1,“SKIP”:2}.get(x[“quality”],3), -x[“rocAnn”]))
 
-# ── Main scan ──────────────────────────────────────────────────────────────
+# – Main scan –––––––––––––––––––––––––––––––
 
 def run_scan():
 if _cache[“running”]:
@@ -368,7 +350,7 @@ while len(UNIVERSE) <= len(_EXTRAS) and time.time() < deadline:
     time.sleep(1)
 
 universe = list(UNIVERSE)
-log.info("Scan start — %d tickers", len(universe))
+log.info("Scan start -- %d tickers", len(universe))
 
 _cache["progress"] = {
     "done": 0, "total": len(universe), "phase": "bulk download",
@@ -376,7 +358,7 @@ _cache["progress"] = {
     "downloaded": 0, "passed": 0,
 }
 
-# ── Earnings calendar runs concurrently with bulk download ────────────
+# -- Earnings calendar runs concurrently with bulk download ------------
 emap = {}
 cal_done = threading.Event()
 def _cal():
@@ -385,10 +367,10 @@ def _cal():
     finally: cal_done.set()
 threading.Thread(target=_cal, daemon=True).start()
 
-# ─────────────────────────────────────────────────────────────────────
-# ── STAGE 1: Batched bulk download ────────────────────────────────────
+# ---------------------------------------------------------------------
+# -- STAGE 1: Batched bulk download ------------------------------------
 # Download in batches of 100 to keep RAM under Railway's 512MB limit.
-# Each batch: ~100 tickers × 126 days × 6 cols = ~6MB. Process then discard.
+# Each batch: ~100 tickers x 126 days x 6 cols = ~6MB. Process then discard.
 BATCH_SIZE = 100
 batches    = [universe[i:i+BATCH_SIZE] for i in range(0, len(universe), BATCH_SIZE)]
 candidates = []  # (sym, price, vol, rv30, rv_lo, rv_hi)
@@ -438,7 +420,7 @@ for bi, batch in enumerate(batches):
             continue
 
     del raw  # free memory immediately after each batch
-    log.info("Batch %d/%d done — %d candidates so far", bi+1, len(batches), len(candidates))
+    log.info("Batch %d/%d done -- %d candidates so far", bi+1, len(batches), len(candidates))
 
 log.info("Stage 1 complete: %d / %d tickers passed", len(candidates), len(universe))
 _cache["progress"]["downloaded"] = len(universe)
@@ -459,9 +441,9 @@ log.info("Stage 2: scoring options on top %d tickers...", len(to_score))
 cal_done.wait(timeout=10)
 log.info("Calendar ready: %d entries", len(emap))
 
-# ─────────────────────────────────────────────────────────────────────
-# STAGE 2: Options chains — 4 parallel workers, each ticker 2 API calls
-# ─────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------
+# STAGE 2: Options chains -- 4 parallel workers, each ticker 2 API calls
+# ---------------------------------------------------------------------
 _cache["progress"].update({
     "done": 0, "total": len(to_score), "phase": "scoring options",
     "ticker": "", "found": 0,
@@ -497,7 +479,7 @@ log.info("Scan done: %d results / %d scored / %d universe / %.0fs",
          len(results), len(to_score), len(universe), time.time()-t0)
 ```
 
-# ── API endpoints ──────────────────────────────────────────────────────────
+# – API endpoints –––––––––––––––––––––––––––––
 
 def _auto_start():
 if not _cache[“running”] and (
@@ -534,8 +516,8 @@ eta  = int((tot - p[“done”]) / rate) if rate > 0 else None
 ```
 labels = {
     "bulk download":   f"Stage 1 of 2: Bulk downloading {len(UNIVERSE):,} tickers at once...",
-    "scoring options": f"Stage 2 of 2: Scoring options — {p['done']}/{tot} tickers · {p.get('found',0)} setups found",
-    "done":            "Scan complete ✓",
+    "scoring options": f"Stage 2 of 2: Scoring options -- {p['done']}/{tot} tickers . {p.get('found',0)} setups found",
+    "done":            "Scan complete ?",
     "idle":            "Ready",
 }
 
