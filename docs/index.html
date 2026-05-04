@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
@@ -19,125 +20,128 @@
     button { cursor:pointer; border:none; background:none; font-family:inherit; }
     input  { outline:none; font-family:inherit; }
 
-    @keyframes spin   { to { transform:rotate(360deg); } }
-    @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-    @keyframes pulse  { 0%,100%{opacity:1} 50%{opacity:.35} }
-    @keyframes blink  { 0%,100%{opacity:1} 50%{opacity:0} }
+```
+@keyframes spin   { to { transform:rotate(360deg); } }
+@keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes pulse  { 0%,100%{opacity:1} 50%{opacity:.35} }
+@keyframes blink  { 0%,100%{opacity:1} 50%{opacity:0} }
 
-    #app { max-width:520px; margin:0 auto; }
+#app { max-width:520px; margin:0 auto; }
 
-    /* ── Header ── */
-    #header {
-      background:#080c12;
-      border-bottom:1px solid var(--border);
-      padding:calc(env(safe-area-inset-top) + 12px) 14px 10px;
-      position:sticky; top:0; z-index:100;
-    }
-    .header-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-    .logo       { display:flex; align-items:center; gap:10px; }
-    .logo-badge { width:30px; height:30px; background:linear-gradient(135deg,var(--green),var(--blue)); border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; color:#000; flex-shrink:0; }
-    .logo-title { font-size:14px; font-weight:700; color:var(--bright); letter-spacing:.03em; }
-    .logo-sub   { font-size:9px; color:var(--muted); letter-spacing:.08em; margin-top:1px; }
-    #refresh-btn { background:#0f1f0f; border:1px solid var(--green); border-radius:8px; padding:7px 13px; color:var(--green); font-size:12px; font-weight:700; display:flex; align-items:center; gap:5px; transition:all .15s; }
-    #refresh-btn:active { opacity:.7; transform:scale(.97); }
-    #refresh-btn:disabled { opacity:.4; cursor:default; }
-    .spin { display:inline-block; animation:spin .8s linear infinite; }
+/* ── Header ── */
+#header {
+  background:#080c12;
+  border-bottom:1px solid var(--border);
+  padding:calc(env(safe-area-inset-top) + 12px) 14px 10px;
+  position:sticky; top:0; z-index:100;
+}
+.header-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.logo       { display:flex; align-items:center; gap:10px; }
+.logo-badge { width:30px; height:30px; background:linear-gradient(135deg,var(--green),var(--blue)); border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; color:#000; flex-shrink:0; }
+.logo-title { font-size:14px; font-weight:700; color:var(--bright); letter-spacing:.03em; }
+.logo-sub   { font-size:9px; color:var(--muted); letter-spacing:.08em; margin-top:1px; }
+#refresh-btn { background:#0f1f0f; border:1px solid var(--green); border-radius:8px; padding:7px 13px; color:var(--green); font-size:12px; font-weight:700; display:flex; align-items:center; gap:5px; transition:all .15s; }
+#refresh-btn:active { opacity:.7; transform:scale(.97); }
+#refresh-btn:disabled { opacity:.4; cursor:default; }
+.spin { display:inline-block; animation:spin .8s linear infinite; }
 
-    .tabs { display:flex; gap:6px; margin-bottom:8px; }
-    .tab  { flex:1; padding:7px 0; border-radius:7px; font-size:12px; font-weight:400; color:var(--muted); background:transparent; border:1px solid var(--border); transition:all .15s; }
-    .tab.active { font-weight:700; color:var(--bright); background:var(--border); border-color:var(--dim); }
+.tabs { display:flex; gap:6px; margin-bottom:8px; }
+.tab  { flex:1; padding:7px 0; border-radius:7px; font-size:12px; font-weight:400; color:var(--muted); background:transparent; border:1px solid var(--border); transition:all .15s; }
+.tab.active { font-weight:700; color:var(--bright); background:var(--border); border-color:var(--dim); }
 
-    .filters { display:flex; gap:5px; }
-    .fpill { flex:1; padding:5px 2px; border-radius:6px; font-size:10px; color:var(--muted); background:transparent; border:1px solid var(--border); transition:all .15s; text-align:center; white-space:nowrap; }
-    .fpill.active-all    { color:var(--muted);  background:#ffffff10; border-color:var(--dim); font-weight:700; }
-    .fpill.active-strong { color:var(--green);  background:#00e87a15; border-color:#00e87a50; font-weight:700; }
-    .fpill.active-decent { color:var(--blue);   background:#38b6ff15; border-color:#38b6ff50; font-weight:700; }
-    .fpill.active-skip   { color:var(--red);    background:#ff445515; border-color:#ff445550; font-weight:700; }
+.filters { display:flex; gap:5px; }
+.fpill { flex:1; padding:5px 2px; border-radius:6px; font-size:10px; color:var(--muted); background:transparent; border:1px solid var(--border); transition:all .15s; text-align:center; white-space:nowrap; }
+.fpill.active-all    { color:var(--muted);  background:#ffffff10; border-color:var(--dim); font-weight:700; }
+.fpill.active-strong { color:var(--green);  background:#00e87a15; border-color:#00e87a50; font-weight:700; }
+.fpill.active-decent { color:var(--blue);   background:#38b6ff15; border-color:#38b6ff50; font-weight:700; }
+.fpill.active-skip   { color:var(--red);    background:#ff445515; border-color:#ff445550; font-weight:700; }
 
-    #content { padding:12px 12px 60px; }
+#content { padding:12px 12px 60px; }
 
-    /* ── Loading screen ── */
-    #csp-loading { padding:40px 20px 32px; animation:fadeUp .3s ease; }
-    .spinner     { width:36px; height:36px; border:3px solid var(--border); border-top:3px solid var(--green); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 16px; }
-    #load-title  { font-size:13px; color:var(--green); font-weight:700; margin-bottom:4px; text-align:center; min-height:18px; }
-    #load-sub    { font-size:11px; color:var(--muted); text-align:center; margin-bottom:14px; min-height:14px; }
+/* ── Loading screen ── */
+#csp-loading { padding:40px 20px 32px; animation:fadeUp .3s ease; }
+.spinner     { width:36px; height:36px; border:3px solid var(--border); border-top:3px solid var(--green); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 16px; }
+#load-title  { font-size:13px; color:var(--green); font-weight:700; margin-bottom:4px; text-align:center; min-height:18px; }
+#load-sub    { font-size:11px; color:var(--muted); text-align:center; margin-bottom:14px; min-height:14px; }
 
-    #prog-wrap  { margin-bottom:10px; display:none; }
-    #prog-track { background:var(--border); border-radius:6px; height:7px; overflow:hidden; margin-bottom:6px; }
-    #prog-bar   { height:100%; background:linear-gradient(90deg,var(--green),var(--blue)); border-radius:6px; width:0%; transition:width .6s ease; }
-    #prog-pct   { font-size:11px; color:var(--muted); text-align:center; }
+#prog-wrap  { margin-bottom:10px; display:none; }
+#prog-track { background:var(--border); border-radius:6px; height:7px; overflow:hidden; margin-bottom:6px; }
+#prog-bar   { height:100%; background:linear-gradient(90deg,var(--green),var(--blue)); border-radius:6px; width:0%; transition:width .6s ease; }
+#prog-pct   { font-size:11px; color:var(--muted); text-align:center; }
 
-    #prog-found  { font-size:14px; color:var(--green); font-weight:700; text-align:center; margin:8px 0 4px; display:none; }
-    #prog-ticker { font-size:11px; color:var(--blue); text-align:center; margin-bottom:12px; min-height:14px; animation:pulse 1.5s infinite; display:none; }
+#prog-found  { font-size:14px; color:var(--green); font-weight:700; text-align:center; margin:8px 0 4px; display:none; }
+#prog-ticker { font-size:11px; color:var(--blue); text-align:center; margin-bottom:12px; min-height:14px; animation:pulse 1.5s infinite; display:none; }
 
-    #prog-stats { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:11px 14px; margin:10px 0; display:none; }
-    .ps-row     { display:flex; justify-content:space-between; font-size:11px; padding:3px 0; }
-    .ps-row + .ps-row { border-top:1px solid var(--border); padding-top:6px; margin-top:3px; }
-    .ps-label   { color:var(--muted); }
-    .ps-val     { font-weight:700; }
+#prog-stats { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:11px 14px; margin:10px 0; display:none; }
+.ps-row     { display:flex; justify-content:space-between; font-size:11px; padding:3px 0; }
+.ps-row + .ps-row { border-top:1px solid var(--border); padding-top:6px; margin-top:3px; }
+.ps-label   { color:var(--muted); }
+.ps-val     { font-weight:700; }
 
-    #conn-status { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; margin:12px 0; text-align:center; }
-    #conn-dots   { font-size:11px; color:var(--muted); margin-bottom:8px; }
-    #conn-timer  { font-size:22px; font-weight:800; color:var(--blue); margin-bottom:4px; }
-    #conn-msg    { font-size:11px; color:var(--dim); line-height:1.5; }
+#conn-status { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; margin:12px 0; text-align:center; }
+#conn-dots   { font-size:11px; color:var(--muted); margin-bottom:8px; }
+#conn-timer  { font-size:22px; font-weight:800; color:var(--blue); margin-bottom:4px; }
+#conn-msg    { font-size:11px; color:var(--dim); line-height:1.5; }
 
-    .load-steps  { border-top:1px solid var(--border); padding-top:12px; margin-top:12px; }
-    .load-step   { font-size:10px; color:var(--dim); margin-bottom:4px; }
+.load-steps  { border-top:1px solid var(--border); padding-top:12px; margin-top:12px; }
+.load-step   { font-size:10px; color:var(--dim); margin-bottom:4px; }
 
-    .live-badge  { display:inline-block; background:var(--green); color:#000; font-size:9px; font-weight:800; border-radius:4px; padding:1px 5px; margin-left:5px; animation:blink .5s ease 4; }
+.live-badge  { display:inline-block; background:var(--green); color:#000; font-size:9px; font-weight:800; border-radius:4px; padding:1px 5px; margin-left:5px; animation:blink .5s ease 4; }
 
-    /* ── Cards ── */
-    .csp-card        { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:10px; overflow:hidden; cursor:pointer; transition:border-color .2s; opacity:1 !important; visibility:visible !important; }
-    .csp-card:active { opacity:.9; transform:scale(.99); }
-    .csp-card.strong { border-color:#003320; }
-    .csp-card.decent { border-color:#001a33; }
-    .csp-card.skip   { border-color:#1a0208; }
-    .csp-card.open.strong { background:#001a0d; }
-    .csp-card.open.decent { background:#001020; }
-    .csp-card.open.skip   { background:#1a0408; }
-    .csp-header  { padding:14px 14px 12px; }
-    .csp-top     { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px; }
-    .csp-metrics { display:flex; gap:7px; flex-wrap:wrap; }
-    .csp-metric  { background:#ffffff08; border:1px solid var(--border); border-radius:6px; padding:5px 9px; text-align:center; }
-    .csp-ml      { font-size:9px; color:var(--muted); letter-spacing:.07em; text-transform:uppercase; margin-bottom:2px; }
-    .csp-mv      { font-size:12px; font-weight:700; }
-    .csp-body    { border-top:1px solid var(--borderhi); padding:14px; animation:fadeUp .2s ease; }
-    .csp-grid    { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
-    .csp-block   { background:#07090e; border:1px solid var(--border); border-radius:8px; padding:11px 13px; font-size:12px; line-height:1.9; }
-    .iv-bar-wrap { display:flex; align-items:center; gap:8px; margin-top:8px; }
-    .iv-bar-track{ flex:1; background:var(--border); border-radius:3px; height:5px; overflow:hidden; }
-    .iv-bar-fill { height:100%; border-radius:3px; }
+/* ── Cards ── */
+.csp-card        { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:10px; overflow:hidden; cursor:pointer; transition:border-color .2s; opacity:1 !important; visibility:visible !important; }
+.csp-card:active { opacity:.9; transform:scale(.99); }
+.csp-card.strong { border-color:#003320; }
+.csp-card.decent { border-color:#001a33; }
+.csp-card.skip   { border-color:#1a0208; }
+.csp-card.open.strong { background:#001a0d; }
+.csp-card.open.decent { background:#001020; }
+.csp-card.open.skip   { background:#1a0408; }
+.csp-header  { padding:14px 14px 12px; }
+.csp-top     { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px; }
+.csp-metrics { display:flex; gap:7px; flex-wrap:wrap; }
+.csp-metric  { background:#ffffff08; border:1px solid var(--border); border-radius:6px; padding:5px 9px; text-align:center; }
+.csp-ml      { font-size:9px; color:var(--muted); letter-spacing:.07em; text-transform:uppercase; margin-bottom:2px; }
+.csp-mv      { font-size:12px; font-weight:700; }
+.csp-body    { border-top:1px solid var(--borderhi); padding:14px; animation:fadeUp .2s ease; }
+.csp-grid    { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+.csp-block   { background:#07090e; border:1px solid var(--border); border-radius:8px; padding:11px 13px; font-size:12px; line-height:1.9; }
+.iv-bar-wrap { display:flex; align-items:center; gap:8px; margin-top:8px; }
+.iv-bar-track{ flex:1; background:var(--border); border-radius:3px; height:5px; overflow:hidden; }
+.iv-bar-fill { height:100%; border-radius:3px; }
 
-    .ticker-badge { border-radius:8px; padding:6px 10px; text-align:center; min-width:52px; flex-shrink:0; }
-    .ticker-sym   { font-size:15px; font-weight:800; color:var(--bright); letter-spacing:.02em; }
-    .ticker-price { font-size:11px; font-weight:700; }
-    .stock-info   { flex:1; margin:0 10px; min-width:0; }
-    .stock-name   { font-size:13px; color:var(--text); font-weight:600; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .card-right   { display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0; }
-    .rec-badge    { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:800; letter-spacing:.06em; }
-    .card-toggle  { text-align:right; font-size:11px; color:var(--dim); margin-top:8px; }
-    .block-title  { font-size:10px; letter-spacing:.12em; font-weight:800; text-transform:uppercase; margin-bottom:10px; }
-    .verdict      { border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:12px; color:var(--text); line-height:1.6; }
-    .trade-block  { background:#07090e; border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:10px; font-size:12px; line-height:1.9; }
-    .t-row        { display:flex; justify-content:space-between; align-items:center; padding:3px 0; }
-    .t-row + .t-row { border-top:1px solid var(--border); padding-top:6px; margin-top:3px; }
-    .t-label      { color:var(--muted); }
-    .verify-note  { margin-top:10px; font-size:10px; color:var(--dim); line-height:1.6; text-align:center; }
+.ticker-badge { border-radius:8px; padding:6px 10px; text-align:center; min-width:52px; flex-shrink:0; }
+.ticker-sym   { font-size:15px; font-weight:800; color:var(--bright); letter-spacing:.02em; }
+.ticker-price { font-size:11px; font-weight:700; }
+.stock-info   { flex:1; margin:0 10px; min-width:0; }
+.stock-name   { font-size:13px; color:var(--text); font-weight:600; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.card-right   { display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0; }
+.rec-badge    { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:800; letter-spacing:.06em; }
+.card-toggle  { text-align:right; font-size:11px; color:var(--dim); margin-top:8px; }
+.block-title  { font-size:10px; letter-spacing:.12em; font-weight:800; text-transform:uppercase; margin-bottom:10px; }
+.verdict      { border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:12px; color:var(--text); line-height:1.6; }
+.trade-block  { background:#07090e; border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:10px; font-size:12px; line-height:1.9; }
+.t-row        { display:flex; justify-content:space-between; align-items:center; padding:3px 0; }
+.t-row + .t-row { border-top:1px solid var(--border); padding-top:6px; margin-top:3px; }
+.t-label      { color:var(--muted); }
+.verify-note  { margin-top:10px; font-size:10px; color:var(--dim); line-height:1.6; text-align:center; }
 
-    /* ── Status + errors ── */
-    #csp-status-bar { text-align:center; font-size:10px; color:var(--dim); margin-top:12px; line-height:1.7; display:none; }
-    #csp-error      { display:none; }
-    #csp-empty      { display:none; text-align:center; padding:48px 20px; color:var(--dim); }
-    #csp-results    { display:none; }
+/* ── Status + errors ── */
+#csp-status-bar { text-align:center; font-size:10px; color:var(--dim); margin-top:12px; line-height:1.7; display:none; }
+#csp-error      { display:none; }
+#csp-empty      { display:none; text-align:center; padding:48px 20px; color:var(--dim); }
+#csp-results    { display:none; }
 
-    /* ── Playbook ── */
-    .pb-intro   { background:#001a0d; border:1px solid #00e87a22; border-left:3px solid var(--green); border-radius:8px; padding:12px 14px; margin-bottom:12px; font-size:12px; color:var(--text); line-height:1.75; }
-    .pb-section { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:13px 14px; margin-bottom:10px; }
-    .pb-title   { font-size:11px; letter-spacing:.1em; font-weight:800; text-transform:uppercase; margin-bottom:10px; }
-    .pb-row     { display:flex; gap:8px; font-size:12px; color:var(--text); line-height:1.65; margin-bottom:8px; align-items:flex-start; }
-    .pb-bullet  { font-weight:800; flex-shrink:0; }
-    .pb-tag     { border-radius:3px; padding:1px 6px; font-size:11px; font-weight:700; margin-right:6px; }
-    .disclaimer { font-size:10px; color:var(--dim); text-align:center; line-height:1.7; margin-top:12px; }
+/* ── Playbook ── */
+.pb-intro   { background:#001a0d; border:1px solid #00e87a22; border-left:3px solid var(--green); border-radius:8px; padding:12px 14px; margin-bottom:12px; font-size:12px; color:var(--text); line-height:1.75; }
+.pb-section { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:13px 14px; margin-bottom:10px; }
+.pb-title   { font-size:11px; letter-spacing:.1em; font-weight:800; text-transform:uppercase; margin-bottom:10px; }
+.pb-row     { display:flex; gap:8px; font-size:12px; color:var(--text); line-height:1.65; margin-bottom:8px; align-items:flex-start; }
+.pb-bullet  { font-weight:800; flex-shrink:0; }
+.pb-tag     { border-radius:3px; padding:1px 6px; font-size:11px; font-weight:700; margin-right:6px; }
+.disclaimer { font-size:10px; color:var(--dim); text-align:center; line-height:1.7; margin-top:12px; }
+```
+
   </style>
 </head>
 <body>
@@ -158,96 +162,101 @@
       </button>
     </div>
 
-    <div class="tabs">
-      <button class="tab active" id="tab-scan"     onclick="setTab('scan')">&#9670; CSP Scanner</button>
-      <button class="tab"        id="tab-playbook" onclick="setTab('playbook')">&#9654; Playbook</button>
-    </div>
+```
+<div class="tabs">
+  <button class="tab active" id="tab-scan"     onclick="setTab('scan')">&#9670; CSP Scanner</button>
+  <button class="tab"        id="tab-playbook" onclick="setTab('playbook')">&#9654; Playbook</button>
+</div>
 
-    <div id="scan-controls">
-      <div class="filters">
-        <button class="fpill active-all" id="cpill-all"    onclick="setCspFilter('all')">All</button>
-        <button class="fpill"            id="cpill-strong" onclick="setCspFilter('strong')" style="color:var(--green)">&#9733; Strong</button>
-        <button class="fpill"            id="cpill-decent" onclick="setCspFilter('decent')" style="color:var(--blue)">&#9670; Decent</button>
-        <button class="fpill"            id="cpill-skip"   onclick="setCspFilter('skip')"   style="color:var(--red)">&#9675; Skip</button>
-      </div>
-    </div>
+<div id="scan-controls">
+  <div class="filters">
+    <button class="fpill active-all" id="cpill-all"    onclick="setCspFilter('all')">All</button>
+    <button class="fpill"            id="cpill-strong" onclick="setCspFilter('strong')" style="color:var(--green)">&#9733; Strong</button>
+    <button class="fpill"            id="cpill-decent" onclick="setCspFilter('decent')" style="color:var(--blue)">&#9670; Decent</button>
+    <button class="fpill"            id="cpill-skip"   onclick="setCspFilter('skip')"   style="color:var(--red)">&#9675; Skip</button>
+  </div>
+</div>
+```
+
   </div><!-- /header -->
 
   <div id="content">
 
-    <!-- Loading screen -->
-    <div id="csp-loading">
-      <div class="spinner"></div>
-      <div id="load-title">Connecting to server...</div>
-      <div id="load-sub">&nbsp;</div>
+```
+<!-- Loading screen -->
+<div id="csp-loading">
+  <div class="spinner"></div>
+  <div id="load-title">Connecting to server...</div>
+  <div id="load-sub">&nbsp;</div>
 
-      <div id="conn-status" style="display:none">
-        <div id="conn-dots">&#9679; &#9679; &#9679;</div>
-        <div id="conn-timer">0s</div>
-        <div id="conn-msg">Waiting for server to respond.<br>Railway may take up to 60s to wake from sleep.</div>
-      </div>
+  <div id="conn-status" style="display:none">
+    <div id="conn-dots">&#9679; &#9679; &#9679;</div>
+    <div id="conn-timer">0s</div>
+    <div id="conn-msg">Waiting for server to respond.<br>Railway may take up to 60s to wake from sleep.</div>
+  </div>
 
-      <div id="prog-wrap">
-        <div id="prog-track"><div id="prog-bar"></div></div>
-        <div id="prog-pct"></div>
-      </div>
+  <div id="prog-wrap">
+    <div id="prog-track"><div id="prog-bar"></div></div>
+    <div id="prog-pct"></div>
+  </div>
 
-      <div id="prog-found"></div>
-      <div id="prog-ticker"></div>
+  <div id="prog-found"></div>
+  <div id="prog-ticker"></div>
 
-      <div id="prog-stats">
-        <div class="ps-row"><span class="ps-label">Universe</span>    <span class="ps-val" id="pstat-univ">—</span></div>
-        <div class="ps-row"><span class="ps-label">Passed filter</span><span class="ps-val" id="pstat-pass">—</span></div>
-        <div class="ps-row"><span class="ps-label">Elapsed</span>      <span class="ps-val" id="pstat-elap">—</span></div>
-        <div class="ps-row"><span class="ps-label">Est. remaining</span><span class="ps-val" id="pstat-eta">—</span></div>
-      </div>
+  <div id="prog-stats">
+    <div class="ps-row"><span class="ps-label">Universe</span>    <span class="ps-val" id="pstat-univ">—</span></div>
+    <div class="ps-row"><span class="ps-label">Passed filter</span><span class="ps-val" id="pstat-pass">—</span></div>
+    <div class="ps-row"><span class="ps-label">Elapsed</span>      <span class="ps-val" id="pstat-elap">—</span></div>
+    <div class="ps-row"><span class="ps-label">Est. remaining</span><span class="ps-val" id="pstat-eta">—</span></div>
+  </div>
 
-      <div class="load-steps">
-        <div class="load-step">&#8250; Stage 1: <strong style="color:var(--green)">Bulk download</strong> — all 1,500+ tickers in one API call (~90s)</div>
-        <div class="load-step">&#8250; Filter by price &gt; $2 and avg volume &gt; 300k</div>
-        <div class="load-step">&#8250; Compute realized volatility from downloaded prices (no extra calls)</div>
-        <div class="load-step">&#8250; Stage 2: Options chains on top 300 by volume (~3 min)</div>
-        <div class="load-step">&#8250; Earnings cross-checked: yfinance calendar + Nasdaq API</div>
-        <div class="load-step">&#8250; Results stream in live as tickers are scored</div>
-      </div>
-    </div>
+  <div class="load-steps">
+    <div class="load-step">&#8250; Stage 1: <strong style="color:var(--green)">Bulk download</strong> — all 1,500+ tickers in one API call (~90s)</div>
+    <div class="load-step">&#8250; Filter by price &gt; $2 and avg volume &gt; 300k</div>
+    <div class="load-step">&#8250; Compute realized volatility from downloaded prices (no extra calls)</div>
+    <div class="load-step">&#8250; Stage 2: Options chains on top 300 by volume (~3 min)</div>
+    <div class="load-step">&#8250; Earnings cross-checked: yfinance calendar + Nasdaq API</div>
+    <div class="load-step">&#8250; Results stream in live as tickers are scored</div>
+  </div>
+</div>
 
-    <div id="csp-results"></div>
-    <div id="csp-error"></div>
-    <div id="csp-empty">
-      <div style="font-size:28px;margin-bottom:12px;opacity:.3">&#11042;</div>
-      <div style="font-size:13px;color:var(--muted)">No results match your filter</div>
-    </div>
-    <div id="csp-status-bar"></div>
+<div id="csp-results"></div>
+<div id="csp-error"></div>
+<div id="csp-empty">
+  <div style="font-size:28px;margin-bottom:12px;opacity:.3">&#11042;</div>
+  <div style="font-size:13px;color:var(--muted)">No results match your filter</div>
+</div>
+<div id="csp-status-bar"></div>
 
-    <!-- Playbook -->
-    <div id="playbook" style="display:none">
-      <div class="pb-intro">
-        <strong style="color:var(--green)">Strategy: Cash-Secured Put (CSP)</strong><br>
-        Sell an OTM put at ~30-delta with 30–50 DTE when IV rank is elevated (&gt;50%).
-        Collect premium. If assigned, sell covered calls (the Wheel) until called away.
-      </div>
-      <div class="pb-section">
-        <div class="pb-title" style="color:var(--green)">Entry Conditions</div>
-        <div class="pb-row"><span class="pb-bullet" style="color:var(--green)">&#8250;</span><span><span class="pb-tag" style="background:#00e87a14;color:var(--green);border:1px solid #00e87a28">STRONG ≥ 60% IV rank</span>Options rich vs 1yr realized vol. Best premium environment.</span></div>
-        <div class="pb-row"><span class="pb-bullet" style="color:var(--blue)">&#8250;</span><span><span class="pb-tag" style="background:#38b6ff14;color:var(--blue);border:1px solid #38b6ff28">DECENT 45–59%</span>Acceptable. Verify technical support at the strike first.</span></div>
-        <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">SKIP &lt; 45%</span>Premium too thin. Earnings conflict = automatic SKIP.</span></div>
-      </div>
-      <div class="pb-section">
-        <div class="pb-title" style="color:var(--blue)">Trade Execution</div>
-        <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#fff1;color:var(--text);border:1px solid #fff2">Strike</span>~30-delta put. Typically 5–15% OTM. Must be near chart support.</span></div>
-        <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#fff1;color:var(--text);border:1px solid #fff2">Expiry</span>30–50 DTE. Best theta decay without excessive gap risk.</span></div>
-        <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#fff1;color:var(--text);border:1px solid #fff2">Take Profit</span>50% of premium. Do NOT hold to expiry.</span></div>
-        <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#fff1;color:var(--text);border:1px solid #fff2">Stop Loss</span>2× premium collected.</span></div>
-      </div>
-      <div class="pb-section">
-        <div class="pb-title" style="color:var(--red)">Critical Rules</div>
-        <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Earnings</span>Never sell a CSP that expires after an earnings date. Gap risk is unlimited.</span></div>
-        <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Spread</span>Bid/ask spread &gt; 20% = skip. Poor liquidity = bad fills.</span></div>
-        <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Sizing</span>Max 5–10% of portfolio per position (collateral limits natural sizing).</span></div>
-      </div>
-      <div class="disclaimer">FOR EDUCATIONAL PURPOSES ONLY &middot; NOT FINANCIAL ADVICE<br>ALWAYS VERIFY BEFORE TRADING</div>
-    </div>
+<!-- Playbook -->
+<div id="playbook" style="display:none">
+  <div class="pb-intro">
+    <strong style="color:var(--green)">Strategy: Cash-Secured Put (CSP)</strong><br>
+    Sell an OTM put at ~30-delta with 30–50 DTE when IV rank is elevated (&gt;50%).
+    Collect premium. If assigned, sell covered calls (the Wheel) until called away.
+  </div>
+  <div class="pb-section">
+    <div class="pb-title" style="color:var(--green)">Entry Conditions</div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--green)">&#8250;</span><span><span class="pb-tag" style="background:#00e87a14;color:var(--green);border:1px solid #00e87a28">STRONG ≥ 60% IV rank</span>Options rich vs 1yr realized vol. Best premium environment.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--blue)">&#8250;</span><span><span class="pb-tag" style="background:#38b6ff14;color:var(--blue);border:1px solid #38b6ff28">DECENT 45–59%</span>Acceptable. Verify technical support at the strike first.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">SKIP &lt; 45%</span>Premium too thin. Earnings conflict = automatic SKIP.</span></div>
+  </div>
+  <div class="pb-section">
+    <div class="pb-title" style="color:var(--blue)">Trade Execution</div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#fff1;color:var(--text);border:1px solid #fff2">Strike</span>~30-delta put. Typically 5–15% OTM. Must be near chart support.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#fff1;color:var(--text);border:1px solid #fff2">Expiry</span>30–50 DTE. Best theta decay without excessive gap risk.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#fff1;color:var(--text);border:1px solid #fff2">Take Profit</span>50% of premium. Do NOT hold to expiry.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--muted)">&#8250;</span><span><span class="pb-tag" style="background:#fff1;color:var(--text);border:1px solid #fff2">Stop Loss</span>2× premium collected.</span></div>
+  </div>
+  <div class="pb-section">
+    <div class="pb-title" style="color:var(--red)">Critical Rules</div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Earnings</span>Never sell a CSP that expires after an earnings date. Gap risk is unlimited.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Spread</span>Bid/ask spread &gt; 20% = skip. Poor liquidity = bad fills.</span></div>
+    <div class="pb-row"><span class="pb-bullet" style="color:var(--red)">&#8250;</span><span><span class="pb-tag" style="background:#ff445514;color:var(--red);border:1px solid #ff445528">Sizing</span>Max 5–10% of portfolio per position (collateral limits natural sizing).</span></div>
+  </div>
+  <div class="disclaimer">FOR EDUCATIONAL PURPOSES ONLY &middot; NOT FINANCIAL ADVICE<br>ALWAYS VERIFY BEFORE TRADING</div>
+</div>
+```
 
   </div><!-- /content -->
 </div><!-- /app -->
@@ -339,14 +348,22 @@ function doPoll() {
   fetch(API + "/api/csp/scan")
     .then(function(r){ return r.json(); })
     .then(function(d){
-      var res    = d.results || [];
-      var ph     = (d.progress && d.progress.phase) || "";
-      var isDone = !d.isRefreshing && ph === "done";
-      var found  = (d.progress && d.progress.found) || 0;
-      var done   = (d.progress && d.progress.done)  || 0;
-      var tot    = (d.progress && d.progress.total) || 0;
+      var res       = d.results || [];
+      var ph        = (d.progress && d.progress.phase) || "";
+      var isRunning = d.isRefreshing || (ph !== "done" && ph !== "idle" && ph !== "");
+      var isDone    = !d.isRefreshing && ph === "done";
+      var found     = (d.progress && d.progress.found) || 0;
+      var done      = (d.progress && d.progress.done)  || 0;
+      var tot       = (d.progress && d.progress.total) || 0;
 
-      // Show results as they stream in (keep polling even with partial results)
+      // If done but suspiciously few results — stale cache from crashed scan
+      // Auto-trigger a fresh scan
+      if (isDone && res.length < 10) {
+        fetch(API + "/api/csp/refresh", {method:"POST"}).catch(function(){});
+        return; // keep polling, new scan will start
+      }
+
+      // Show results as they stream in — keep polling regardless
       if (res.length > results.length) {
         results = res;
         document.getElementById("csp-loading").style.display = "none";
@@ -355,30 +372,31 @@ function doPoll() {
         draw();
       }
 
-      // Update status text while still scanning
-      if (!isDone) {
+      // Update loading screen text while scanning
+      if (isRunning || !isDone) {
         var t = document.getElementById("load-title");
         var s = document.getElementById("load-sub");
-        if (ph === "bulk download" || ph === "starting") {
+        if (ph.indexOf("bulk download") !== -1) {
           if (t) t.textContent = "Stage 1: Bulk downloading tickers...";
-          if (s) s.textContent = "One call for 1,500+ tickers (~90s)";
+          if (s) s.textContent = ph + " (~90s total)";
         } else if (ph === "scoring options" || ph === "scoring") {
           if (t) t.textContent = "Stage 2: Scoring options chains...";
           if (s) s.textContent = done + " / " + tot + " done \u00b7 " + found + " setups found";
+        } else if (ph === "starting" || ph === "fetching earnings calendar") {
+          if (t) t.textContent = "Fetching earnings calendar...";
+          if (s) s.textContent = "Starting scan...";
         }
         return; // keep polling
       }
 
-      // Scan is done — stop polling
-      clearInterval(poll); poll = null;
-      clearInterval(tick); tick = null;
-      document.getElementById("csp-loading").style.display = "none";
-      if (results.length > 0) {
+      // Scan is done with good results — stop polling
+      if (isDone && results.length >= 10) {
+        clearInterval(poll); poll = null;
+        clearInterval(tick); tick = null;
+        document.getElementById("csp-loading").style.display = "none";
         document.getElementById("csp-results").style.display = "block";
         document.getElementById("csp-status-bar").style.display = "block";
         draw();
-      } else {
-        document.getElementById("csp-empty").style.display = "block";
       }
     })
     .catch(function(){
@@ -550,5 +568,6 @@ function doRefresh() {
     .finally(function(){ btn.disabled=false; });
 }
 </script>
+
 </body>
 </html>
