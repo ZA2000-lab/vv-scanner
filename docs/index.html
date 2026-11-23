@@ -601,6 +601,7 @@ function applyScan(d) {
   if (d.results && d.results.length) S.results = d.results;
   renderMarket(d.market);
   renderStatus(d.progress);
+  if (d.error) $("status").insertAdjacentHTML("afterbegin", '<div class="demo" style="margin-top:10px">' + esc(d.error) + '</div>');
   if (S.view === "scan") renderList();
   var busy = d.isRefreshing || (!d.results || !d.results.length);
   $("btn-refresh").classList.toggle("spin", !!d.isRefreshing);

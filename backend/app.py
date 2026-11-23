@@ -47,7 +47,7 @@ def _env_num(name, default, cast=float):
 # -- Config (all overridable with Railway env vars) ---------------------------
 CACHE_TTL        = _env_num("CACHE_TTL_HOURS", 6) * 3600
 DAYS_AHEAD       = 60                                     # earnings look-ahead
-SCORING_WORKERS  = _env_num("SCORING_WORKERS", 4, int)    # options-chain threads
+SCORING_WORKERS  = _env_num("SCORING_WORKERS", 3, int)    # options-chain threads
 SCORING_CAP      = _env_num("SCORING_CAP", 700, int)      # tickers sent to Stage 2
 MIN_PRICE        = _env_num("MIN_PRICE", 5.0)
 MIN_AVG_VOL      = _env_num("MIN_AVG_VOL", 300_000)
@@ -57,6 +57,9 @@ TARGET_DELTA     = _env_num("TARGET_DELTA", 0.30)
 DTE_MIN, DTE_MAX, DTE_TARGET = 28, 52, 40
 RISK_FREE        = _env_num("RISK_FREE", 0.04)
 REFRESH_COOLDOWN = _env_num("REFRESH_COOLDOWN_MIN", 10) * 60
+DL_THREADS       = _env_num("DOWNLOAD_THREADS", 6, int)    # parallel requests inside one bulk batch
+BATCH_PAUSE      = _env_num("BATCH_PAUSE_SEC", 2.0)        # rest between bulk batches
+RETRY_MIN        = _env_num("BLOCKED_RETRY_MIN", 20)       # retry delay when Yahoo blocks option chains
 DATA_DIR         = os.environ.get("DATA_DIR", "/tmp")    # point at a Railway volume to persist
 AUTO_SCAN        = os.environ.get("AUTO_SCAN", "1") == "1"
 NY               = ZoneInfo("America/New_York")
@@ -451,6 +454,65 @@ def history_metrics(h, filters=True):
     }
 
 
+# -- Yahoo option-chain gate ------------------------------------------------
+class _YahooGate:
+    """Yahoo answers a rate-limited options request with an empty list, not an error.
+    Many empties in a row from liquid tickers means we're blocked: pause the workers,
+    re-test on SPY, and give up on the scan if the block doesn't lift."""
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.streak = 0
+        self.blocked = False
+        self.pauses = 0
+
+    def reset(self):
+        with self.lock:
+            self.streak, self.blocked, self.pauses = 0, False, 0
+
+    def ok(self):
+        with self.lock:
+            self.streak = 0
+
+    def empty(self):
+        with self.lock:
+            self.streak += 1
+
+    def wait_if_needed(self):
+        with self.lock:
+            if self.blocked:
+                return False
+            if self.streak < 12:
+                return True
+            self.streak = 0
+            self.pauses += 1
+            if self.pauses > 4:
+                self.blocked = True
+                return False
+        log.warning("Option chains coming back empty; pausing 60s (pause %d)", self.pauses)
+        _cache["progress"]["phase"] = "scoring options"
+        _cache["progress"]["ticker"] = "Yahoo busy, pausing"
+        time.sleep(60)
+        return not self.blocked
+
+
+_yahoo_gate = _YahooGate()
+
+
+def options_available(tries=5, wait=45):
+    """Pre-flight: can we read SPY's option expirations right now?"""
+    for i in range(tries):
+        try:
+            if yf.Ticker("SPY").options:
+                return True
+        except Exception:
+            pass
+        if i < tries - 1:
+            log.warning("SPY options empty (try %d/%d); waiting %ds", i + 1, tries, wait)
+            _cache["progress"]["phase"] = "waiting on Yahoo"
+            time.sleep(wait)
+    return False
+
+
 # -- Stage 2: options ----------------------------------------------------------
 def _pick_expiration(opts, today_d):
     best, best_d = None, None
@@ -528,7 +590,9 @@ def score_options(sym, m, emap, record_iv=True):
     today_d = date.today()
     opts = _retry(lambda: stock.options)
     if not opts:
+        _yahoo_gate.empty()
         return None
+    _yahoo_gate.ok()
     exp, dte = _pick_expiration(opts, today_d)
     if not exp:
         return None
@@ -640,7 +704,7 @@ def _sort(lst):
 def fetch_market():
     try:
         raw = _retry(lambda: yf.download(["SPY", "QQQ", "IWM", "^VIX"], period="1y", interval="1d",
-                                         group_by="ticker", auto_adjust=True, threads=True,
+                                         group_by="ticker", auto_adjust=True, threads=DL_THREADS,
                                          progress=False, timeout=30))
     except Exception as e:
         log.warning("market: %s", e)
@@ -678,6 +742,20 @@ def fetch_market():
 
 
 # -- Main scan ---------------------------------------------------------------
+def _blocked_abort(partial=None):
+    """Yahoo is blocking option chains. Keep the last good results and retry later."""
+    msg = ("Yahoo is rate-limiting option chains right now. Showing the last good scan; "
+           "retrying automatically in %d minutes." % RETRY_MIN)
+    if not _cache["results"] and partial:
+        _cache["results"] = _sort(partial)
+    _cache["error"] = msg
+    log.warning(msg)
+    t = threading.Timer(RETRY_MIN * 60, _start_scan_thread)
+    t.daemon = True
+    t.start()
+
+
+
 def run_scan():
     if not _scan_lock.acquire(blocking=False):
         return
@@ -728,7 +806,7 @@ def _run_scan_inner():
         _cache["progress"]["done"] = bi * BATCH
         try:
             raw = _retry(lambda: yf.download(tickers=batch, period="1y", interval="1d",
-                                             group_by="ticker", auto_adjust=True, threads=True,
+                                             group_by="ticker", auto_adjust=True, threads=DL_THREADS,
                                              progress=False, timeout=60), attempts=2)
         except Exception as e:
             log.warning("Batch %d failed: %s", bi + 1, e)
@@ -753,7 +831,7 @@ def _run_scan_inner():
         del raw
         _cache["progress"]["downloaded"] = min(len(universe), (bi + 1) * BATCH)
         _cache["progress"]["passed"] = len(candidates)
-        time.sleep(0.3)
+        time.sleep(BATCH_PAUSE)
 
     log.info("Stage 1: %d / %d passed", len(candidates), len(universe))
     if not candidates:
@@ -764,6 +842,12 @@ def _run_scan_inner():
     to_score = candidates[:SCORING_CAP]
     cal_done.wait(timeout=30)
 
+    time.sleep(15)  # let Yahoo's limiter cool off after the bulk downloads
+    _yahoo_gate.reset()
+    if not options_available():
+        _blocked_abort()
+        return
+
     _cache["progress"].update({"done": 0, "total": len(to_score), "phase": "scoring options",
                                "ticker": "", "found": 0})
     results, lock = [], threading.Lock()
@@ -772,6 +856,10 @@ def _run_scan_inner():
     def score_one(item):
         sym, m = item
         r = None
+        if not _yahoo_gate.wait_if_needed():
+            with lock:
+                _cache["progress"]["done"] += 1
+            return
         try:
             r = score_options(sym, m, emap)
         except Exception as e:
@@ -790,6 +878,9 @@ def _run_scan_inner():
         list(pool.map(score_one, to_score))
 
     final = _sort(results)
+    if _yahoo_gate.blocked and len(final) < 25:
+        _blocked_abort(partial=final)
+        return
     _cache["results"] = final
     _cache["ts"] = time.time()
     _cache["stats"] = {
